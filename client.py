@@ -14,5 +14,5 @@ for c in data:
 print encrypted_data
 print "0x%02x" % key[0]
 print "0x%02x" % key[1]
-pkt = IP(src='10.4.31.151', dst='10.4.31.131')/ICMP(type=8, code=0, chksum=key_info)/encrypted_data
+pkt = IP(src='192.168.1.100', dst='192.168.1.255')/ICMP(type=8, code=0, chksum=key_info)/encrypted_data
 send(pkt)
