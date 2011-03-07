@@ -1,0 +1,2 @@
+#define MESSAGE_SHELLCODE 	0x01
+#define MESSAGE_COMMAND 	0x02

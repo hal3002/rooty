@@ -1,0 +1,3 @@
+ICMP based libpcap backdoor based on the idea from: http://packetstormsecurity.org/search/?q=silentdoor
+
+Also includes the ability to send shellcode for execution and a connectionless shell functionality
