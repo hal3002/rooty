@@ -14,7 +14,7 @@
 #define DEBUG
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      512
-#define MAX_PACKET_SIZE 4096
+#define MAX_PACKET_SIZE 128
 #define MAGIC           "GOATSE"
 
 #define MESSAGE_SHELLCODE 	0x01
