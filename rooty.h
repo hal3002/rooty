@@ -12,7 +12,7 @@
 #include <sys/mman.h>
 #include <bits/waitflags.h>
 
-#define DEBUG
+//#define DEBUG
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      512
 #define MAX_PACKET_SIZE 1024
