@@ -1,3 +1,8 @@
 ICMP based libpcap backdoor based on the idea from: http://packetstormsecurity.org/search/?q=silentdoor
 
 Also includes the ability to send shellcode for execution and a connectionless shell functionality
+
+To build, you only need to have libpcap development files installed.
+Then you should only have to run make.
+To make a debug build with error message run: make debug
+If you have upx installed and would liked a packed version: make upx
