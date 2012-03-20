@@ -157,7 +157,7 @@ fi
 
 # Pull in the standard compiler and linker flags.
 CFLAGS="$CFLAGS $CWARNINGS"
-LDFLAGS="$LDFLAGS $PROFILE_LDFLAGS"
+LDFLAGS="$LDFLAGS $PROFILE_LDFLAGS -static"
 
 echo "LDFLAGS set to $LDFLAGS"
 echo "CFLAGS set to $CFLAGS"
