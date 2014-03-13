@@ -33,6 +33,7 @@ case "$host" in
     ;;
     *-linux*)
         AC_DEFINE([C_LINUX],1,[target is linux])
+        AC_DEFINE([Linux],1,[target is linux])
         CDEFINE="-D_GNU_SOURCE"
         CPPFLAGS="${CPPFLAGS} -D_GNU_SOURCE"
         platform="linux"
@@ -83,7 +84,15 @@ AS_IF([test "x$PCAP" = "xno"],
           [AC_MSG_ERROR("pcap library not found")]
      )
 
+AC_CHECK_HEADERS([hijack.h], [], [HIJACK_HEADER="no"])
+AS_IF([test "x$HIJACK_HEADER" = "xno"],
+          [AC_MSG_ERROR("hijack header not found")]
+     )
 
+AC_CHECK_LIB([hijack], [InitHijack], [], [HIJACK="no"])
+AS_IF([test "x$HIJACK" = "xno"],
+          [AC_MSG_ERROR("hijack library not found")]
+     )
 
 # Pull in the standard header and function checks.
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h limits.h netdb.h netinet/in.h stdint.h stdlib.h string.h sys/socket.h unistd.h stdarg.h])

