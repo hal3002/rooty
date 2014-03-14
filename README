@@ -6,3 +6,5 @@ To build, you only need to have libpcap development files installed.
 Then you should only have to run make.
 To make a debug build with error message run: make debug
 If you have upx installed and would liked a packed version: make upx
+
+Now requires https://github.com/SoldierX/libhijack for shellcode injection into other processes
