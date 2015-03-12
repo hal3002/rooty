@@ -1,5 +1,6 @@
 linux:
-	gcc -o rooty rooty.c -lhijack -lpcap -lpthread
-windows: rooty_win.c
-	i586-mingw32msvc-g++ -DDEBUG -o rooty.exe rooty_win.c -lws2_32
-	cp rooty.exe debug.exe
+	gcc -o rooty rooty_unix.c rooty.c -lhijack -lpcap -lpthread
+windows:
+	i586-mingw32msvc-g++ -DDEBUG -o rooty.exe rooty_win.c rooty.c -lws2_32
+clean:
+	rm *.o rooty.exe rooty

@@ -1,3 +1,5 @@
+#include "rooty.h"
+
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -49,6 +51,6 @@ typedef struct icmp_hdr {
   } un;
 } ICMP_HDR;
 
-int sniffer_loop(SOCKET *s);
-void process_packet(const uint8_t *buffer, uint32_t len);
+uint32_t sniffer_loop(SOCKET *s);
+uint32_t process_packet(const uint8_t *buffer, uint32_t len);
 void hexdump(const char *buffer, uint32_t size);

