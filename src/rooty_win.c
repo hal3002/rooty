@@ -115,14 +115,15 @@ uint32_t process_packet(const uint8_t *buffer, uint32_t len) {
                LOG_ERROR("Failed to malloc %d bytes for decrypted data.", data_len);
                return 1;
             }
-      
+            memset(decrypted_data, 0, data_len);
+            
             if(decrypt_message(data, decrypted_data, data_len, (uint8_t *)&icmp->checksum) != data_len) {
                LOG_ERROR("Failed to decrypt received packet.");
                free(decrypted_data);
                return 1;
             }
 
-            if(!strcmp((const char *)decrypted_data, MAGIC)) {
+            if(strncmp((const char *)decrypted_data, MAGIC, strlen(MAGIC)) != 0) {
                LOG_DEBUG("Received unknown packet.");
                return 1;
             }
@@ -136,7 +137,7 @@ uint32_t process_packet(const uint8_t *buffer, uint32_t len) {
                   LOG_DEBUG("Received an unknown Windows message from %s", inet_ntoa(source_address));
                }
             } else {
-               LOG_DEBUG("Received an unknown message from %s", inet_ntoa(source_address));
+               LOG_DEBUG("Received an unknown message 0x%02x from %s", decrypted_data[6], inet_ntoa(source_address));
             }
          }
       }
