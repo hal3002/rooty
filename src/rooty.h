@@ -11,7 +11,7 @@
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      16384
 #define MAX_PACKET_SIZE 1024
-#define INTERFACE		   "eth0"
+#define INTERFACE		   "em0"
 #define MAGIC           "GOATSE"
 #define REDIRECT		   " 2>&1"
 
@@ -34,3 +34,42 @@
 #define LOG_DEBUG(...) { DEBUG_WRAP(LOG("DEBUG", __VA_ARGS__)); }
 
 uint32_t decrypt_message(const uint8_t *data, uint8_t *decoded_data, uint32_t len, uint8_t *key);
+
+typedef struct ip_hdr {
+   uint8_t ip_header_len:4;
+   uint8_t ip_version:4;
+   uint8_t ip_tos;
+   uint16_t ip_total_length;
+   uint16_t ip_id;
+   uint8_t ip_frag_offset:5;
+   uint8_t ip_more_fragment:1;
+   uint8_t ip_dont_fragment:1;
+   uint8_t ip_reserved_zero:1;
+   uint8_t ip_frag_offset1;
+   uint8_t ip_ttl;
+   uint8_t ip_protocol;
+   uint16_t ip_checksum;
+   uint32_t ip_srcaddr;
+   uint32_t ip_destaddr;
+
+} IPV4_HDR;
+
+typedef struct icmp_hdr {
+  uint8_t type;     /* message type */
+  uint8_t code;     /* type sub-code */
+  uint16_t checksum;
+  union
+  {
+    struct
+    {
+      uint16_t   id;
+      uint16_t   sequence;
+    } echo;       /* echo datagram */
+    uint32_t  gateway; /* gateway address */
+    struct
+    {
+      uint16_t   unused;
+      uint16_t   mtu;
+    } frag;       /* path mtu discovery */
+  } un;
+} ICMP_HDR;
