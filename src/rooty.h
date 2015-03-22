@@ -20,7 +20,23 @@
 #define MESSAGE_REMOTE_SHELLCODE	   0x04  // Inject shellcode into another process
 #define MESSAGE_WINDOWS_32          0x08  
 #define MESSAGE_LINUX_32            0x10
+#define MESSAGE_FREEBSD_32          0x20
 
+#ifdef __FreeBSD__
+   #define FreeBSD
+#endif
+
+#ifdef __linux__
+   #define Linux
+#endif
+
+#ifdef __MINGW32__
+   #define Windows
+#endif
+
+#ifdef __MINGW64__
+   #define Windows
+#endif
 
 #ifdef DEBUG
 #define DEBUG_WRAP(code) code

