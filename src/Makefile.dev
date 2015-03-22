@@ -4,5 +4,8 @@ windows:
 	i586-mingw32msvc-g++ -DDEBUG -o rooty.exe rooty_win.c rooty.c -lws2_32
 clean:
 	rm *.o rooty.exe rooty
-static:
-	gcc48 -DDEBUG -o rooty rooty_unix.c rooty.c -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I/home/hal/libhijack/include -O2 -fno-strict-aliasing -Wall -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -DDEBUG -static libhijack.o rtld.o error.o func.o elf.o map.o misc.o os_resolv.o ptrace.o
+freebsd:
+	gcc48 -o rooty rooty_unix.c rooty.c -O2 -fno-strict-aliasing -fdiagnostics-show-option -static -Wall -Wwrite-strings -Wformat -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -lpcap
+	strip rooty
+freebsd-debug:
+	gcc48 -DDEBUG -o rooty rooty_unix.c rooty.c -O2 -fno-strict-aliasing -fdiagnostics-show-option -static -Wall -Wwrite-strings -Wformat -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -lpcap
