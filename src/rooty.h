@@ -11,7 +11,6 @@
 #define SIZE_ETHERNET   14
 #define STACK_SIZE      16384
 #define MAX_PACKET_SIZE 1024
-#define INTERFACE		   "em0"
 #define MAGIC           "GOATSE"
 #define REDIRECT		   " 2>&1"
 

