@@ -7,9 +7,9 @@ rm rooty-debug.$ARCH
 rm rooty-release.$ARCH
 rm rooty-upx.$ARCH
 
-gcc -DDEBUG -o rooty rooty_unix.c rooty.c -lhijack -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I/home/hal/libhijack/include
-gcc -O2 -fno-strict-aliasing -Wall -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -DDEBUG -static -o rooty-debug.$ARCH rooty.c rooty_unix.c -lpcap libhijack.o error.o misc.o ptrace.o map.o elf.o func.o rtld.o os_resolv.o -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I/home/hal/libhijack/include
-gcc -O2 -fno-strict-aliasing -Wall -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -static -o rooty-release.$ARCH rooty.c rooty_unix.c -lpcap libhijack.o error.o misc.o ptrace.o map.o elf.o func.o rtld.o os_resolv.o -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I/home/hal/libhijack/include
+gcc -DDEBUG -o rooty rooty_unix.c rooty.c -lhijack -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I$HOME/libhijack/include
+gcc -O2 -fno-strict-aliasing -Wall -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -DDEBUG -static -o rooty-debug.$ARCH rooty.c rooty_unix.c -lpcap libhijack.o error.o misc.o ptrace.o map.o elf.o func.o rtld.o os_resolv.o -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I$HOME/libhijack/include
+gcc -O2 -fno-strict-aliasing -Wall -Wwrite-strings -Wformat -fdiagnostics-show-option -Wextra -Wformat-security -Wsign-compare -Wcast-align -Wno-unused-parameter -static -o rooty-release.$ARCH rooty.c rooty_unix.c -lpcap libhijack.o error.o misc.o ptrace.o map.o elf.o func.o rtld.o os_resolv.o -lpcap -lpthread -I/usr/src/libexec/rtld-elf -I/usr/src/libexec/rtld-elf/amd64 -I$HOME/libhijack/include
 
 
 

