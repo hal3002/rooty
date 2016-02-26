@@ -74,13 +74,13 @@ def build_pkt(src, dst, data, key_info):
    if src_ip:
       ip.src = src
 
-   return ip/ICMP(type=8, code=0, chksum=key_info)/data
+   return ip/ICMP(type=8, code=0, id=key_info)/data
 
 def sniff_packet(pkt):
    global magic 
 
-   if ICMP in pkt and pkt[ICMP].chksum and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
-      data = crypt_data(pkt.load, generate_key(pkt[ICMP].chksum))
+   if ICMP in pkt and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
+      data = crypt_data(pkt.load, generate_key(pkt[ICMP].id))
 
       if data.startswith(magic):
          print data[len(magic) + 1:]
