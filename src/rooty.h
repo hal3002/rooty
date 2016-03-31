@@ -9,6 +9,7 @@
 
 
 #define SIZE_ETHERNET   14
+#define SIZE_COOKED     16
 #define STACK_SIZE      16384
 #define MAX_PACKET_SIZE 1024
 #define MAGIC           "GOATSE"

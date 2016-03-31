@@ -14,13 +14,15 @@
   #include <hijack.h>
   #include <hijack_func.h>
   #include <hijack_ptrace.h>
-  #define INTERFACE "eth0"
+  #define INTERFACE "any"
 #endif
 
 #ifdef FreeBSD
   #define INTERFACE "em0"
 #endif
 
+// We need to keep track of the packet header type
+int data_type = 0;
 
 // Build response packets for sending
 int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t *data, uint32_t size);

