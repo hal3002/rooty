@@ -441,7 +441,7 @@ int main(int argc, char **argv) {
   DEBUG_WRAP(fprintf(stderr, "Datalink Type: %d\n", data_type));
   
 	// We only want to see ICMP traffic
-	if(pcap_compile(handle, &fp, bpf_filter, 0, PCAP_NETMASK_UNKNOWN)) {
+	if(pcap_compile(handle, &fp, bpf_filter, 0, 0xffffffff)) {
 		DEBUG_WRAP(fprintf(stderr, "Error compiling bpf filter '%s': %s\n", bpf_filter, pcap_geterr(handle)));
 		return -1;
 	}

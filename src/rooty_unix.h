@@ -17,7 +17,7 @@
   #define INTERFACE "any"
 #endif
 
-#ifdef FreeBSD
+#ifdef BSD
   #define INTERFACE "em0"
 #endif
 

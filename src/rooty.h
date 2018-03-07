@@ -22,8 +22,8 @@
 #define MESSAGE_LINUX_32            0x10
 #define MESSAGE_FREEBSD_32          0x20
 
-#ifdef __FreeBSD__
-   #define FreeBSD
+#ifdef __unix__
+   #define BSD
 #endif
 
 #ifdef __linux__
