@@ -35,7 +35,7 @@ class Metasploit3 < Msf::Auxiliary
       'DefaultTarget'  => 0
       ))
 
-      deregister_options('PCAPFILE', 'FILTER', 'SNAPLEN', 'TIMEOUT')
+      deregister_options('PCAPFILE', 'FILTER', 'SNAPLEN', 'TIMEOUT', 'BLANK_PASSWORDS', 'DB_ALL_CREDS', 'DB_ALL_PASS', 'DB_ALL_USERS', 'PASSWORD', 'PASS_FILE', 'USERNAME', 'USERPASS_FILE', 'USER_AS_PASS', 'USER_FILE')
       register_options(
       [
         OptString.new('SHOST',   [false, 'The source address of the ICMP packet', nil]),
