@@ -15,8 +15,6 @@ ltmain.sh
 missing
 src/.deps
 src/*.swp
-src/Makefile
-src/Makefile.in
 src/rooty.o
 stamp-h1
 *.swp
