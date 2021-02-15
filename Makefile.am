@@ -1,4 +1,0 @@
-SUBDIRS = src
-DISTCLEANFILES=stamp-h.in
-ACLOCAL_AMFLAGS = -I m4
-
