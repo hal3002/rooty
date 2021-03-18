@@ -1,4 +1,4 @@
-cd ..
+cd ../src
 wget https://www.tcpdump.org/release/libpcap-1.10.0.tar.gz
 tar -xf libpcap-1.10.0.tar.gz
 cd libpcap-1.10.0
